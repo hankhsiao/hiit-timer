@@ -4,6 +4,7 @@ import {
   History, Volume2, VolumeX, Zap, List, Trophy, Clock,
   X, Plus, Minus, Sun, Moon
 } from 'lucide-react';
+import NoSleep from 'nosleep.js';
 
 // ─── Theme ────────────────────────────────────────────────────────────────────
 const DARK = {
@@ -127,6 +128,7 @@ class AudioEngine {
 }
 
 const audioEngine = new AudioEngine();
+const noSleep = new NoSleep();
 
 // ─── App ──────────────────────────────────────────────────────────────────────
 export default function App() {
@@ -153,10 +155,9 @@ export default function App() {
   const [editNames,    setEditNames]    = useState([]);
   const [pulse,        setPulse]        = useState(false);
 
-  const timerRef    = useRef(null);
-  const kickRef     = useRef(null);  // synth kick interval
-  const wakeLockRef = useRef(null);
-  const stateRef    = useRef({});
+  const timerRef  = useRef(null);
+  const kickRef   = useRef(null);  // synth kick interval
+  const stateRef  = useRef({});
   stateRef.current = { phase, timeLeft, currentEx, currentRound, settings, isActive, phaseDur };
 
   // Sync mute state to engine
@@ -172,33 +173,6 @@ export default function App() {
       clearInterval(kickRef.current);
     }
     return () => clearInterval(kickRef.current);
-  }, [isActive]);
-
-  // Screen Wake Lock – keeps display on while timer is running so audio never stops
-  useEffect(() => {
-    const acquire = async () => {
-      if (!('wakeLock' in navigator)) return;
-      try {
-        wakeLockRef.current = await navigator.wakeLock.request('screen');
-      } catch (e) { console.warn('WakeLock request failed', e); }
-    };
-    const release = async () => {
-      if (wakeLockRef.current) {
-        try { await wakeLockRef.current.release(); } catch (e) {}
-        wakeLockRef.current = null;
-      }
-    };
-    // Re-acquire after browser releases it (e.g. user briefly switches tab)
-    const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible') acquire();
-    };
-    if (isActive) {
-      acquire();
-      document.addEventListener('visibilitychange', onVisibilityChange);
-    } else {
-      release();
-    }
-    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
   }, [isActive]);
 
   const calcTotal = (s = settings) => {
@@ -231,6 +205,7 @@ export default function App() {
         setPhase('FINISHED'); setIsActive(false);
         audioEngine.speak('訓練完成，太棒了');
         audioEngine.stopSilentLoop();
+        noSleep.disable();
         const rec = { id: Date.now(), date: new Date().toLocaleDateString('zh-TW'), duration: Math.ceil(calcTotal() / 60) };
         setHistory(h => [rec, ...h].slice(0, 20));
       }
@@ -293,14 +268,17 @@ export default function App() {
       const roundStr = settings.rounds > 1 ? `共 ${settings.rounds} 組，` : '';
       audioEngine.speak(`今天的訓練：${roundStr}${exList}。五秒後開始`);
       audioEngine.startSilentLoop();
+      noSleep.enable();
       startPhase('PREPARING', 5);
       setCurrentEx(0); setCurrentRound(1); setIsActive(true);
     } else {
       if (isActive) {
         audioEngine.stopSilentLoop();
+        noSleep.disable();
       } else {
         audioEngine.startSilentLoop();
         audioEngine.resume();
+        noSleep.enable();
       }
       setIsActive(a => !a);
     }
@@ -309,6 +287,7 @@ export default function App() {
   const reset = () => {
     clearInterval(timerRef.current);
     audioEngine.stopSilentLoop();
+    noSleep.disable();
     window.speechSynthesis?.cancel();
     setIsActive(false); setPhase('IDLE'); setTimeLeft(0); setPhaseDur(1);
     setCurrentEx(0); setCurrentRound(1);
