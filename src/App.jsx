@@ -24,6 +24,7 @@ const LIGHT = {
 
 const PHASES = {
   IDLE:        { label: '準備就緒', color: '#FF4C5E' },
+  ANNOUNCING:  { label: '播報中…',  color: '#4C6EF5' },
   PREPARING:   { label: '預備...',  color: '#4C6EF5' },
   WORK:        { label: '運動中',   color: '#FF4C5E' },
   REST:        { label: '休息',     color: '#20C997' },
@@ -93,6 +94,10 @@ class AudioEngine {
     if (this.silentAudio) { this.silentAudio.pause(); this.silentAudio.currentTime = 0; }
   }
 
+  stopSpeech() {
+    window.speechSynthesis?.cancel();
+  }
+
   async resume() {
     if (this.ctx && this.ctx.state === 'suspended') {
       try { await this.ctx.resume(); } catch (e) {}
@@ -123,13 +128,15 @@ class AudioEngine {
     }
   }
 
-  speak(text) {
-    if (this.muted) return;
+  // onEnd fires when speech completes (or immediately if muted / synth unavailable)
+  speak(text, onEnd) {
+    if (this.muted) { onEnd?.(); return; }
     const synth = window.speechSynthesis;
-    if (!synth) return;
+    if (!synth) { onEnd?.(); return; }
     synth.cancel();
     const u = new SpeechSynthesisUtterance(text);
     u.lang = 'zh-TW'; u.rate = 1.1; u.volume = 1;
+    if (onEnd) { u.onend = onEnd; u.onerror = onEnd; }
     synth.speak(u);
   }
 
@@ -170,9 +177,11 @@ export default function App() {
   const [pulse, setPulse]                     = useState(false);
   const [dropdownOpen, setDropdownOpen]       = useState(false);
 
-  const timerRef = useRef(null);
-  const kickRef  = useRef(null);
-  const stateRef = useRef({});
+  const timerRef          = useRef(null);
+  const kickRef           = useRef(null);
+  const stateRef          = useRef({});
+  const announcingRef     = useRef(false);
+  const announceFallback  = useRef(null);
 
   const activeRoutine = routines.find(r => r.id === activeRoutineId) || routines[0];
   const settings      = activeRoutine.settings;
@@ -282,17 +291,45 @@ export default function App() {
     return () => clearInterval(timerRef.current);
   }, [isActive, phase]);
 
+  const cancelAnnouncing = () => {
+    announcingRef.current = false;
+    clearTimeout(announceFallback.current);
+    setPhase('IDLE');
+    audioEngine.stopSpeech();
+    audioEngine.stopSilentLoop();
+    noSleep.disable();
+  };
+
   const toggle = () => {
     audioEngine.init();
 
+    // Cancel mid-announcement
+    if (phase === 'ANNOUNCING') {
+      cancelAnnouncing();
+      return;
+    }
+
     if (phase === 'IDLE' || phase === 'FINISHED') {
-      const exList  = settings.exerciseNames.join('，');
+      const exList   = settings.exerciseNames.join('，');
       const roundStr = settings.rounds > 1 ? `共 ${settings.rounds} 組，` : '';
-      audioEngine.speak(`今天的訓練：${roundStr}${exList}。五秒後開始`);
+
       audioEngine.startSilentLoop();
       noSleep.enable();
-      startPhase('PREPARING', 5);
-      setCurrentEx(0); setCurrentRound(1); setIsActive(true);
+      setCurrentEx(0); setCurrentRound(1);
+      setPhase('ANNOUNCING');
+      announcingRef.current = true;
+
+      const afterAnnounce = () => {
+        if (!announcingRef.current) return;
+        announcingRef.current = false;
+        clearTimeout(announceFallback.current);
+        startPhase('PREPARING', 3);
+        setIsActive(true);
+      };
+
+      audioEngine.speak(`今天的訓練：${roundStr}${exList}`, afterAnnounce);
+      // Fallback in case onend never fires (iOS PWA quirk)
+      announceFallback.current = setTimeout(afterAnnounce, 15000);
     } else {
       if (isActive) {
         audioEngine.stopSilentLoop();
@@ -307,10 +344,11 @@ export default function App() {
   };
 
   const reset = () => {
+    if (announcingRef.current) cancelAnnouncing();
     clearInterval(timerRef.current);
     audioEngine.stopSilentLoop();
+    audioEngine.stopSpeech();
     noSleep.disable();
-    window.speechSynthesis?.cancel();
     setIsActive(false); setPhase('IDLE'); setTimeLeft(0); setPhaseDur(1);
     setCurrentEx(0); setCurrentRound(1);
   };
@@ -342,13 +380,14 @@ export default function App() {
   };
 
   const openExercises = () => {
+    audioEngine.init();
     setEditNames([...settings.exerciseNames]);
     setModal('exercises');
   };
 
   const phaseInfo     = PHASES[phase] || PHASES.IDLE;
   const circumference = 2 * Math.PI * 110;
-  const ringFraction  = (phase === 'IDLE' || phase === 'FINISHED' || phaseDur === 0)
+  const ringFraction  = (phase === 'IDLE' || phase === 'ANNOUNCING' || phase === 'FINISHED' || phaseDur === 0)
     ? 0 : (phaseDur - timeLeft) / phaseDur;
   const ringOffset    = circumference * (1 - ringFraction);
   const isRunning     = phase !== 'IDLE' && phase !== 'FINISHED';
@@ -385,12 +424,12 @@ export default function App() {
         width: '100%', maxWidth: 420, padding: '52px 20px 0',
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
       }}>
-        {/* Left: hamburger menu */}
+        {/* Left: exercise list */}
         <button
-          onClick={e => { e.stopPropagation(); audioEngine.init(); setModal('menu'); }}
-          style={ib()}
+          onClick={() => openExercises()}
+          style={{ ...ib(), padding: '10px 16px', gap: 6, fontSize: 13, fontWeight: 700, flexDirection: 'row' }}
         >
-          <Menu size={20} />
+          <List size={16} /><span>動作清單</span>
         </button>
 
         {/* Center: routine dropdown */}
@@ -439,8 +478,13 @@ export default function App() {
           )}
         </div>
 
-        {/* Right: empty spacer to keep centre centred */}
-        <div style={{ width: 44 }} />
+        {/* Right: hamburger menu */}
+        <button
+          onClick={e => { e.stopPropagation(); audioEngine.init(); setModal('menu'); }}
+          style={ib()}
+        >
+          <Menu size={20} />
+        </button>
       </div>
 
       {/* ── Ring ── */}
@@ -462,15 +506,17 @@ export default function App() {
           <div style={{ fontSize: 68, fontWeight: 900, fontFamily: "'DM Mono', monospace",
             lineHeight: 1, color: T.text,
             transform: pulse ? 'scale(1.05)' : 'scale(1)', transition: 'transform 0.15s' }}>
-            {phase === 'IDLE' ? fmt(calcTotal()) : fmt(timeLeft)}
+            {phase === 'IDLE' || phase === 'ANNOUNCING' ? fmt(calcTotal()) : fmt(timeLeft)}
           </div>
-          {phase !== 'IDLE' && phase !== 'FINISHED' && (
+          {phase !== 'IDLE' && phase !== 'ANNOUNCING' && phase !== 'FINISHED' && (
             <div style={{ fontSize: 11, color: T.subtext, fontWeight: 700, marginTop: 10 }}>
               第 {currentRound} 組 / 共 {settings.rounds} 組
             </div>
           )}
-          {phase === 'IDLE' && (
-            <div style={{ fontSize: 11, color: T.subtext, fontWeight: 600, marginTop: 8 }}>預計總時長</div>
+          {(phase === 'IDLE' || phase === 'ANNOUNCING') && (
+            <div style={{ fontSize: 11, color: T.subtext, fontWeight: 600, marginTop: 8 }}>
+              {phase === 'ANNOUNCING' ? '點擊取消' : '預計總時長'}
+            </div>
           )}
         </div>
       </div>
@@ -495,7 +541,7 @@ export default function App() {
 
       {/* ── Play / Reset ── */}
       <div style={{ display: 'flex', gap: 20, alignItems: 'center', marginBottom: 36 }}>
-        {phase !== 'IDLE'
+        {phase !== 'IDLE' && phase !== 'ANNOUNCING'
           ? <button onClick={reset} style={{ width: 52, height: 52, borderRadius: '50%',
               background: T.iconBtn, border: 'none', color: T.text, cursor: 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -508,7 +554,7 @@ export default function App() {
           boxShadow: T.glow ? `0 0 36px ${phaseInfo.color}55` : '0 4px 16px rgba(0,0,0,0.15)',
           transition: 'background 0.5s, box-shadow 0.5s',
         }}>
-          {isActive
+          {isActive || phase === 'ANNOUNCING'
             ? <Pause size={30} color="#fff" fill="#fff" />
             : <Play  size={30} color="#fff" fill="#fff" style={{ transform: 'translateX(2px)' }} />}
         </button>
@@ -571,8 +617,6 @@ export default function App() {
             label={isMuted ? '開啟聲音' : '靜音'}
             onClick={() => { audioEngine.muted = !isMuted; setIsMuted(m => !m); setModal(null); }} />
           <Divider T={T} />
-          <MenuItem T={T} icon={<List size={18} />} label="動作清單"
-            onClick={() => openExercises()} />
           <MenuItem T={T} icon={<History size={18} />} label="訓練紀錄"
             onClick={() => setModal('history')} />
           <Divider T={T} />
