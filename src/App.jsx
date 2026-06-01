@@ -532,7 +532,7 @@ export default function App() {
                   background: T.modalBg, borderRadius: 14, padding: '6px 0',
                   boxShadow: '0 8px 32px rgba(0,0,0,0.28)', zIndex: 50,
                   minWidth: 140, border: `1px solid ${T.cardBorder}`,
-                  animation: 'fadeIn 0.12s ease',
+                  animation: 'dropdownIn 0.12s ease',
                 }}>
                   {routines.map(r => (
                     <button
@@ -641,7 +641,7 @@ export default function App() {
             <span style={{ fontSize: 15, fontWeight: 700, color: T.text }}>模式</span>
           </div>
           <div style={{ display: 'flex', gap: 6 }}>
-            {[['hiit', 'HIIT'], ['strength', '重訓']].map(([m, label]) => (
+            {[['hiit', '循環'], ['strength', '直組']].map(([m, label]) => (
               <button key={m}
                 onClick={() => updateSettings(s => ({ ...s, mode: m }))}
                 style={{
@@ -828,7 +828,13 @@ export default function App() {
         </Sheet>
       )}
 
-      <style>{`@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}`}</style>
+      <style>{`
+        @keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+        @keyframes dropdownIn{
+          from{opacity:0;transform:translateX(-50%) translateY(4px)}
+          to{opacity:1;transform:translateX(-50%) translateY(0)}
+        }
+      `}</style>
     </div>
   );
 }
