@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   Play, Pause, RotateCcw, Activity, Timer, RefreshCw,
   History, Volume2, VolumeX, Zap, List, Trophy, Clock,
-  X, Plus, Minus, Sun, Moon
+  X, Plus, Minus, Sun, Moon, Menu, ChevronDown, Trash2
 } from 'lucide-react';
 import NoSleep from 'nosleep.js';
 
@@ -31,10 +31,33 @@ const PHASES = {
   FINISHED:    { label: '完成！',   color: '#7C3AED' },
 };
 
-const DEFAULT_SETTINGS = {
-  workTime: 30, restTime: 30, rounds: 3, roundReset: 60,
-  exerciseNames: ['開合跳', '波比跳', '登山者', '深蹲跳'],
-};
+const DEFAULT_ROUTINES = [
+  {
+    id: 'hiit',
+    name: 'HIIT',
+    settings: { workTime: 30, restTime: 30, rounds: 3, roundReset: 60, exerciseNames: ['開合跳', '波比跳', '登山者', '深蹲跳'] },
+  },
+  {
+    id: 'legs',
+    name: '腿臀',
+    settings: { workTime: 45, restTime: 45, rounds: 3, roundReset: 60, exerciseNames: ['高腳杯深蹲', '單腿羅馬尼亞硬舉', '保加利亞分腿蹲'] },
+  },
+  {
+    id: 'push',
+    name: '推系',
+    settings: { workTime: 45, restTime: 45, rounds: 3, roundReset: 60, exerciseNames: ['深幅度伏地挺身', '地板啞鈴飛鳥', '腳高頭低伏地挺身'] },
+  },
+  {
+    id: 'pull',
+    name: '拉系',
+    settings: { workTime: 45, restTime: 45, rounds: 3, roundReset: 60, exerciseNames: ['單臂啞鈴划船', '仰臥拉舉', '站姿啞鈴二頭彎舉'] },
+  },
+  {
+    id: 'shoulders',
+    name: '肩',
+    settings: { workTime: 45, restTime: 45, rounds: 3, roundReset: 60, exerciseNames: ['坐姿啞鈴肩推', '啞鈴側平舉', '俯身飛鳥'] },
+  },
+];
 
 function load(key, fb) {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fb; } catch { return fb; }
@@ -44,10 +67,6 @@ function fmt(s) {
 }
 
 // ─── Audio Engine ─────────────────────────────────────────────────────────────
-// Uses Web Audio API for beeps (works when screen is locked on iOS PWA)
-// Uses SpeechSynthesis for voice cues (requires screen on in browser; works in PWA)
-// A silent looping <audio> keeps the AudioContext session alive on iOS
-
 class AudioEngine {
   constructor() {
     this.ctx = null;
@@ -55,17 +74,14 @@ class AudioEngine {
     this.muted = false;
   }
 
-  // Must be called on first user gesture
   init() {
     if (this.ctx) return;
     try {
       this.ctx = new (window.AudioContext || window.webkitAudioContext)();
-      // Silent looping audio – keeps audio session alive on iOS when screen locks
-      // A 1-sample silent WAV encoded as base64
       const silentWav = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
       this.silentAudio = new Audio(silentWav);
       this.silentAudio.loop = true;
-      this.silentAudio.volume = 0.001; // near-silent but not 0
+      this.silentAudio.volume = 0.001;
     } catch (e) { console.warn('AudioContext unavailable', e); }
   }
 
@@ -77,7 +93,6 @@ class AudioEngine {
     if (this.silentAudio) { this.silentAudio.pause(); this.silentAudio.currentTime = 0; }
   }
 
-  // Resume context if suspended (iOS requires this after interruption)
   async resume() {
     if (this.ctx && this.ctx.state === 'suspended') {
       try { await this.ctx.resume(); } catch (e) {}
@@ -99,12 +114,10 @@ class AudioEngine {
     osc.start(t); osc.stop(t + duration + 0.02);
   }
 
-  // High beep = countdown tick; low beep = phase end
   tickBeep(n) {
     if (n === 0) {
-      // Double beep for phase end
       this.beep(660, 0.15, 0.4, 0);
-      this.beep(880, 0.2,  0.5, 0.18);
+      this.beep(880, 0.2, 0.5, 0.18);
     } else {
       this.beep(880, 0.1, 0.25, 0);
     }
@@ -120,7 +133,6 @@ class AudioEngine {
     synth.speak(u);
   }
 
-  // iOS SpeechSynthesis sometimes pauses itself – kick it periodically
   kickSynth() {
     const synth = window.speechSynthesis;
     if (synth && synth.speaking) synth.pause(), synth.resume();
@@ -142,30 +154,44 @@ export default function App() {
   }, []);
   const T = darkMode ? DARK : LIGHT;
 
-  const [settings,     setSettings]     = useState(() => load('hiit_settings', DEFAULT_SETTINGS));
-  const [history,      setHistory]      = useState(() => load('hiit_history',  []));
-  const [phase,        setPhase]        = useState('IDLE');
-  const [isActive,     setIsActive]     = useState(false);
-  const [timeLeft,     setTimeLeft]     = useState(0);
-  const [phaseDur,     setPhaseDur]     = useState(1);
-  const [currentEx,    setCurrentEx]    = useState(0);
-  const [currentRound, setCurrentRound] = useState(1);
-  const [isMuted,      setIsMuted]      = useState(false);
-  const [modal,        setModal]        = useState(null);
-  const [editNames,    setEditNames]    = useState([]);
-  const [pulse,        setPulse]        = useState(false);
+  const [routines, setRoutines]               = useState(() => load('hiit_routines', DEFAULT_ROUTINES));
+  const [activeRoutineId, setActiveRoutineId] = useState(() => load('hiit_active_routine', 'hiit'));
+  const [history, setHistory]                 = useState(() => load('hiit_history', []));
+  const [phase, setPhase]                     = useState('IDLE');
+  const [isActive, setIsActive]               = useState(false);
+  const [timeLeft, setTimeLeft]               = useState(0);
+  const [phaseDur, setPhaseDur]               = useState(1);
+  const [currentEx, setCurrentEx]             = useState(0);
+  const [currentRound, setCurrentRound]       = useState(1);
+  const [isMuted, setIsMuted]                 = useState(false);
+  const [modal, setModal]                     = useState(null);
+  const [editNames, setEditNames]             = useState([]);
+  const [newRoutineName, setNewRoutineName]   = useState('');
+  const [pulse, setPulse]                     = useState(false);
+  const [dropdownOpen, setDropdownOpen]       = useState(false);
 
-  const timerRef  = useRef(null);
-  const kickRef   = useRef(null);  // synth kick interval
-  const stateRef  = useRef({});
-  stateRef.current = { phase, timeLeft, currentEx, currentRound, settings, isActive, phaseDur };
+  const timerRef = useRef(null);
+  const kickRef  = useRef(null);
+  const stateRef = useRef({});
 
-  // Sync mute state to engine
+  const activeRoutine = routines.find(r => r.id === activeRoutineId) || routines[0];
+  const settings      = activeRoutine.settings;
+
+  stateRef.current = { phase, timeLeft, currentEx, currentRound, settings, isActive, phaseDur, routineName: activeRoutine.name };
+
+  const updateSettings = (updater) => {
+    setRoutines(rs => rs.map(r =>
+      r.id === activeRoutineId
+        ? { ...r, settings: typeof updater === 'function' ? updater(r.settings) : { ...r.settings, ...updater } }
+        : r
+    ));
+  };
+
   useEffect(() => { audioEngine.muted = isMuted; }, [isMuted]);
-  useEffect(() => { localStorage.setItem('hiit_settings', JSON.stringify(settings)); }, [settings]);
-  useEffect(() => { localStorage.setItem('hiit_history',  JSON.stringify(history));  }, [history]);
+  useEffect(() => { localStorage.setItem('hiit_routines', JSON.stringify(routines)); }, [routines]);
+  useEffect(() => { localStorage.setItem('hiit_active_routine', JSON.stringify(activeRoutineId)); }, [activeRoutineId]);
+  useEffect(() => { localStorage.setItem('hiit_history', JSON.stringify(history)); }, [history]);
 
-  // Kick SpeechSynthesis every 10s to prevent iOS pausing it
   useEffect(() => {
     if (isActive) {
       kickRef.current = setInterval(() => audioEngine.kickSynth(), 10000);
@@ -184,7 +210,7 @@ export default function App() {
   const startPhase = (p, dur) => { setPhase(p); setTimeLeft(dur); setPhaseDur(dur); };
 
   const transition = () => {
-    const { phase, currentEx, currentRound, settings } = stateRef.current;
+    const { phase, currentEx, currentRound, settings, routineName } = stateRef.current;
     const { workTime, restTime, roundReset, rounds, exerciseNames } = settings;
     const lastEx    = currentEx === exerciseNames.length - 1;
     const lastRound = currentRound === rounds;
@@ -195,7 +221,6 @@ export default function App() {
       audioEngine.speak(`${exerciseNames[0]} 開始`);
     } else if (phase === 'WORK') {
       if (!lastEx) {
-        // Announce NEXT exercise before rest starts (preview feeling)
         audioEngine.speak(`休息，準備好${exerciseNames[currentEx + 1]}`);
         startPhase('REST', restTime);
       } else if (!lastRound) {
@@ -206,7 +231,12 @@ export default function App() {
         audioEngine.speak('訓練完成，太棒了');
         audioEngine.stopSilentLoop();
         noSleep.disable();
-        const rec = { id: Date.now(), date: new Date().toLocaleDateString('zh-TW'), duration: Math.ceil(calcTotal() / 60) };
+        const rec = {
+          id: Date.now(),
+          date: new Date().toLocaleDateString('zh-TW'),
+          duration: Math.ceil(calcTotal(settings) / 60),
+          routineName,
+        };
         setHistory(h => [rec, ...h].slice(0, 20));
       }
     } else if (phase === 'REST') {
@@ -215,7 +245,7 @@ export default function App() {
       audioEngine.speak(`${exerciseNames[next]} 開始`);
     } else if (phase === 'ROUND_RESET') {
       setCurrentEx(0); setCurrentRound(r => r + 1); startPhase('WORK', workTime);
-      audioEngine.speak(`第 ${currentRound + 1} 組，${settings.exerciseNames[0]} 開始`);
+      audioEngine.speak(`第 ${currentRound + 1} 組，${exerciseNames[0]} 開始`);
     }
   };
 
@@ -224,28 +254,22 @@ export default function App() {
 
     timerRef.current = setInterval(() => {
       setTimeLeft(t => {
-        const { phase, phaseDur, currentEx, settings } = stateRef.current;
+        const { phase, currentEx, settings } = stateRef.current;
         const { workTime, exerciseNames } = settings;
         const next = t - 1;
 
-        // Countdown beeps at 3,2,1,0
         if (next <= 3) audioEngine.tickBeep(next);
 
-        // Mid-point voice cue for WORK phases > 30s
         if (phase === 'WORK' && workTime > 30) {
           const half = Math.floor(workTime / 2);
           if (next === half) audioEngine.speak('一半了，繼續');
         }
 
-        // Preview next exercise 3 seconds before REST ends
         if (phase === 'REST' && next === 3) {
           const nextIdx = currentEx + 1;
-          if (nextIdx < exerciseNames.length) {
-            audioEngine.speak(`準備好，${exerciseNames[nextIdx]}`);
-          }
+          if (nextIdx < exerciseNames.length) audioEngine.speak(`準備好，${exerciseNames[nextIdx]}`);
         }
 
-        // Preview next exercise 3 seconds before ROUND_RESET ends
         if (phase === 'ROUND_RESET' && next === 3) {
           audioEngine.speak(`準備好，${exerciseNames[0]}`);
         }
@@ -259,12 +283,10 @@ export default function App() {
   }, [isActive, phase]);
 
   const toggle = () => {
-    // Init audio engine on first user gesture
     audioEngine.init();
 
     if (phase === 'IDLE' || phase === 'FINISHED') {
-      // Read out all exercises before starting
-      const exList = settings.exerciseNames.join('，');
+      const exList  = settings.exerciseNames.join('，');
       const roundStr = settings.rounds > 1 ? `共 ${settings.rounds} 組，` : '';
       audioEngine.speak(`今天的訓練：${roundStr}${exList}。五秒後開始`);
       audioEngine.startSilentLoop();
@@ -293,11 +315,43 @@ export default function App() {
     setCurrentEx(0); setCurrentRound(1);
   };
 
+  const switchRoutine = (id) => {
+    reset();
+    setActiveRoutineId(id);
+    setDropdownOpen(false);
+  };
+
+  const addRoutine = () => {
+    const name = newRoutineName.trim() || '新課表';
+    const id   = `routine_${Date.now()}`;
+    setRoutines(rs => [...rs, { id, name, settings: { ...settings } }]);
+    reset();
+    setActiveRoutineId(id);
+    setModal(null);
+    setNewRoutineName('');
+  };
+
+  const deleteRoutine = (id) => {
+    if (routines.length <= 1) return;
+    const next = routines.filter(r => r.id !== id);
+    setRoutines(next);
+    if (activeRoutineId === id) {
+      setActiveRoutineId(next[0].id);
+      reset();
+    }
+  };
+
+  const openExercises = () => {
+    setEditNames([...settings.exerciseNames]);
+    setModal('exercises');
+  };
+
   const phaseInfo     = PHASES[phase] || PHASES.IDLE;
   const circumference = 2 * Math.PI * 110;
   const ringFraction  = (phase === 'IDLE' || phase === 'FINISHED' || phaseDur === 0)
     ? 0 : (phaseDur - timeLeft) / phaseDur;
-  const ringOffset = circumference * (1 - ringFraction);
+  const ringOffset    = circumference * (1 - ringFraction);
+  const isRunning     = phase !== 'IDLE' && phase !== 'FINISHED';
 
   const ib = (extra = {}) => ({
     background: T.iconBtn, border: 'none', color: T.text, borderRadius: 14,
@@ -316,39 +370,86 @@ export default function App() {
   };
 
   return (
-    <div style={{ fontFamily: "'DM Sans', sans-serif", background: T.bg, minHeight: '100vh',
-      display: 'flex', flexDirection: 'column', alignItems: 'center',
-      color: T.text, userSelect: 'none', transition: 'background 0.35s, color 0.35s' }}>
+    <div
+      style={{
+        fontFamily: "'DM Sans', sans-serif", background: T.bg, minHeight: '100vh',
+        display: 'flex', flexDirection: 'column', alignItems: 'center',
+        color: T.text, userSelect: 'none', transition: 'background 0.35s, color 0.35s',
+      }}
+      onClick={() => setDropdownOpen(false)}
+    >
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,700;9..40,900&family=DM+Mono:wght@500&display=swap" rel="stylesheet" />
 
-      {/* Header */}
-      <div style={{ width: '100%', maxWidth: 420, padding: '52px 20px 0',
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <button onClick={() => { audioEngine.init(); setEditNames([...settings.exerciseNames]); setModal('exercises'); }}
-          style={{ ...ib(), padding: '10px 16px', gap: 6, fontSize: 13, fontWeight: 700, flexDirection: 'row' }}>
-          <List size={16} /><span>動作清單</span>
+      {/* ── Header ── */}
+      <div style={{
+        width: '100%', maxWidth: 420, padding: '52px 20px 0',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+      }}>
+        {/* Left: hamburger menu */}
+        <button
+          onClick={e => { e.stopPropagation(); audioEngine.init(); setModal('menu'); }}
+          style={ib()}
+        >
+          <Menu size={20} />
         </button>
-        <span style={{ fontSize: 12, fontWeight: 900, letterSpacing: '0.18em', color: T.subtext }}>HIIT TIMER</span>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => setDarkMode(d => !d)} style={ib()}>
-            {darkMode ? <Sun size={18} /> : <Moon size={18} />}
+
+        {/* Center: routine dropdown */}
+        <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
+          <button
+            onClick={() => !isRunning && setDropdownOpen(o => !o)}
+            style={{
+              background: 'none', border: 'none',
+              cursor: isRunning ? 'default' : 'pointer',
+              display: 'flex', alignItems: 'center', gap: 5,
+              fontSize: 13, fontWeight: 900, letterSpacing: '0.15em',
+              color: isRunning ? T.subtext : T.text,
+              padding: '6px 8px', borderRadius: 10,
+              transition: 'color 0.3s', textTransform: 'uppercase',
+            }}
+          >
+            {activeRoutine.name}
+            {!isRunning && <ChevronDown size={13} style={{ opacity: 0.55, marginTop: 1 }} />}
           </button>
-          <button onClick={() => { audioEngine.muted = !isMuted; setIsMuted(m => !m); }}
-            style={ib({ color: isMuted ? T.subtext : T.text })}>
-            {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
-          </button>
-          <button onClick={() => setModal('history')} style={ib()}><History size={18} /></button>
+
+          {dropdownOpen && (
+            <div style={{
+              position: 'absolute', top: 'calc(100% + 6px)', left: '50%',
+              transform: 'translateX(-50%)',
+              background: T.modalBg, borderRadius: 14, padding: '6px 0',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.28)', zIndex: 50,
+              minWidth: 140, border: `1px solid ${T.cardBorder}`,
+              animation: 'fadeIn 0.15s ease',
+            }}>
+              {routines.map(r => (
+                <button
+                  key={r.id}
+                  onClick={() => switchRoutine(r.id)}
+                  style={{
+                    width: '100%', padding: '10px 18px', background: 'none', border: 'none',
+                    cursor: 'pointer', textAlign: 'left', display: 'block',
+                    fontSize: 14, fontWeight: r.id === activeRoutineId ? 900 : 600,
+                    color: r.id === activeRoutineId ? phaseInfo.color : T.text,
+                    letterSpacing: '0.04em',
+                  }}
+                >
+                  {r.name}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
+
+        {/* Right: empty spacer to keep centre centred */}
+        <div style={{ width: 44 }} />
       </div>
 
-      {/* Ring */}
+      {/* ── Ring ── */}
       <div style={{ position: 'relative', margin: '32px 0 20px', width: 264, height: 264 }}>
         <svg width="264" height="264" style={{ position: 'absolute', inset: 0, transform: 'rotate(-90deg)' }}>
           <circle cx="132" cy="132" r="110" fill="none" stroke={T.ringTrack} strokeWidth="8" />
           <circle cx="132" cy="132" r="110" fill="none"
             stroke={phaseInfo.color} strokeWidth="8"
-            strokeDasharray={circumference}
-            strokeDashoffset={ringOffset}
+            strokeDasharray={circumference} strokeDashoffset={ringOffset}
             strokeLinecap="round"
             style={{ transition: 'stroke-dashoffset 0.95s linear, stroke 0.5s ease' }} />
         </svg>
@@ -374,7 +475,7 @@ export default function App() {
         </div>
       </div>
 
-      {/* Exercise dots */}
+      {/* ── Exercise dots ── */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 24, height: 28, alignItems: 'center' }}>
         {phase === 'WORK' && settings.exerciseNames.map((name, i) => (
           <div key={i} style={{
@@ -392,7 +493,7 @@ export default function App() {
         ))}
       </div>
 
-      {/* Play/Reset */}
+      {/* ── Play / Reset ── */}
       <div style={{ display: 'flex', gap: 20, alignItems: 'center', marginBottom: 36 }}>
         {phase !== 'IDLE'
           ? <button onClick={reset} style={{ width: 52, height: 52, borderRadius: '50%',
@@ -414,25 +515,29 @@ export default function App() {
         <div style={{ width: 52 }} />
       </div>
 
-      {/* Settings */}
+      {/* ── Settings cards ── */}
       <div style={{ width: '100%', maxWidth: 420, padding: '0 20px 48px', display: 'flex', flexDirection: 'column', gap: 10 }}>
         {[
           { label: 'Work',        key: 'workTime',      icon: <Activity  size={18} />, color: '#FF4C5E', isTime: true  },
           { label: 'Rest',        key: 'restTime',      icon: <Timer     size={18} />, color: '#20C997', isTime: true  },
-          { label: 'Exercises',   key: 'exerciseNames', icon: <Zap       size={18} />, color: '#748FFC', readOnly: true, display: settings.exerciseNames.length },
+          { label: 'Exercises',   key: 'exerciseNames', icon: <Zap       size={18} />, color: '#748FFC', readOnly: true, display: `${settings.exerciseNames.length} 個動作`, onCardClick: openExercises },
           { label: 'Rounds',      key: 'rounds',        icon: <RefreshCw size={18} />, color: '#748FFC', isTime: false },
           { label: 'Round Reset', key: 'roundReset',    icon: <Clock     size={18} />, color: '#F59F00', isTime: true  },
         ].map(item => (
-          <div key={item.key} style={cardS}>
+          <div
+            key={item.key}
+            style={{ ...cardS, cursor: item.onCardClick ? 'pointer' : 'default' }}
+            onClick={item.onCardClick}
+          >
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{ color: item.color }}>{item.icon}</div>
               <span style={{ fontSize: 15, fontWeight: 700, color: T.text }}>{item.label}</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               {!item.readOnly && (
-                <button style={stepS} onClick={() => setSettings(s => ({
-                  ...s, [item.key]: Math.max(item.key === 'rounds' ? 1 : 5, s[item.key] - (item.key === 'rounds' ? 1 : 5))
-                }))}>
+                <button style={stepS} onClick={e => { e.stopPropagation(); updateSettings(s => ({
+                  ...s, [item.key]: Math.max(item.key === 'rounds' ? 1 : 5, s[item.key] - (item.key === 'rounds' ? 1 : 5)),
+                })); }}>
                   <Minus size={14} />
                 </button>
               )}
@@ -441,9 +546,9 @@ export default function App() {
                 {item.readOnly ? item.display : item.isTime ? fmt(settings[item.key]) : `${settings[item.key]}×`}
               </span>
               {!item.readOnly && (
-                <button style={stepS} onClick={() => setSettings(s => ({
-                  ...s, [item.key]: s[item.key] + (item.key === 'rounds' ? 1 : 5)
-                }))}>
+                <button style={stepS} onClick={e => { e.stopPropagation(); updateSettings(s => ({
+                  ...s, [item.key]: s[item.key] + (item.key === 'rounds' ? 1 : 5),
+                })); }}>
                   <Plus size={14} />
                 </button>
               )}
@@ -452,7 +557,33 @@ export default function App() {
         ))}
       </div>
 
-      {/* Modal: History */}
+      {/* ════════ Modals ════════ */}
+
+      {/* Menu */}
+      {modal === 'menu' && (
+        <Sheet T={T} onClose={() => setModal(null)} title="選單">
+          <MenuItem T={T}
+            icon={darkMode ? <Sun size={18} /> : <Moon size={18} />}
+            label={darkMode ? '切換亮色模式' : '切換暗色模式'}
+            onClick={() => { setDarkMode(d => !d); setModal(null); }} />
+          <MenuItem T={T}
+            icon={isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+            label={isMuted ? '開啟聲音' : '靜音'}
+            onClick={() => { audioEngine.muted = !isMuted; setIsMuted(m => !m); setModal(null); }} />
+          <Divider T={T} />
+          <MenuItem T={T} icon={<List size={18} />} label="動作清單"
+            onClick={() => openExercises()} />
+          <MenuItem T={T} icon={<History size={18} />} label="訓練紀錄"
+            onClick={() => setModal('history')} />
+          <Divider T={T} />
+          <MenuItem T={T} icon={<Plus size={18} />} label="新增課表"
+            onClick={() => { setNewRoutineName(''); setModal('addRoutine'); }} />
+          <MenuItem T={T} icon={<List size={18} />} label="管理課表"
+            onClick={() => setModal('manageRoutines')} />
+        </Sheet>
+      )}
+
+      {/* History */}
       {modal === 'history' && (
         <Sheet T={T} onClose={() => setModal(null)} title="訓練紀錄">
           {history.length === 0
@@ -462,7 +593,9 @@ export default function App() {
                 alignItems: 'center', padding: '13px 0', borderBottom: `1px solid ${T.divider}` }}>
                 <div>
                   <div style={{ fontSize: 11, color: T.subtext, marginBottom: 2 }}>{h.date}</div>
-                  <div style={{ fontWeight: 700, fontSize: 15, color: T.text }}>{h.duration} 分鐘 HIIT</div>
+                  <div style={{ fontWeight: 700, fontSize: 15, color: T.text }}>
+                    {h.duration} 分鐘 · {h.routineName || 'HIIT'}
+                  </div>
                 </div>
                 <Trophy size={17} style={{ color: '#F59F00' }} />
               </div>
@@ -471,12 +604,12 @@ export default function App() {
         </Sheet>
       )}
 
-      {/* Modal: Exercises */}
+      {/* Exercises */}
       {modal === 'exercises' && (
         <Sheet T={T} onClose={() => setModal(null)} title="動作清單"
           footer={
             <button onClick={() => {
-              setSettings(s => ({ ...s, exerciseNames: editNames.filter(n => n.trim()) }));
+              updateSettings(s => ({ ...s, exerciseNames: editNames.filter(n => n.trim()) }));
               setModal(null);
             }} style={{ width: '100%', padding: 14, background: '#FF4C5E', border: 'none',
               borderRadius: 14, color: '#fff', fontWeight: 800, fontSize: 15, cursor: 'pointer' }}>
@@ -504,16 +637,97 @@ export default function App() {
         </Sheet>
       )}
 
+      {/* Add Routine */}
+      {modal === 'addRoutine' && (
+        <Sheet T={T} onClose={() => setModal(null)} title="新增課表"
+          footer={
+            <button onClick={addRoutine}
+              style={{ width: '100%', padding: 14, background: '#FF4C5E', border: 'none',
+                borderRadius: 14, color: '#fff', fontWeight: 800, fontSize: 15, cursor: 'pointer' }}>
+              建立
+            </button>
+          }>
+          <div style={{ fontSize: 13, color: T.subtext, fontWeight: 600, marginBottom: 10 }}>
+            將複製「{activeRoutine.name}」的目前設定
+          </div>
+          <input
+            value={newRoutineName}
+            onChange={e => setNewRoutineName(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && addRoutine()}
+            placeholder="課表名稱…"
+            autoFocus
+            style={{ width: '100%', background: T.inputBg, border: `1px solid ${T.inputBorder}`,
+              borderRadius: 12, padding: '14px 16px', color: T.inputText,
+              fontSize: 15, fontWeight: 600, outline: 'none', fontFamily: 'inherit',
+              boxSizing: 'border-box' }} />
+        </Sheet>
+      )}
+
+      {/* Manage Routines */}
+      {modal === 'manageRoutines' && (
+        <Sheet T={T} onClose={() => setModal(null)} title="管理課表">
+          {routines.map(r => (
+            <div key={r.id} style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              padding: '13px 0', borderBottom: `1px solid ${T.divider}`,
+            }}>
+              <div style={{ flex: 1, minWidth: 0, marginRight: 12 }}>
+                <div style={{ fontWeight: 700, fontSize: 15, color: r.id === activeRoutineId ? '#FF4C5E' : T.text, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {r.name}
+                  {r.id === activeRoutineId && (
+                    <span style={{ fontSize: 10, color: T.subtext, fontWeight: 600 }}>使用中</span>
+                  )}
+                </div>
+                <div style={{ fontSize: 11, color: T.subtext, marginTop: 3,
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {r.settings.exerciseNames.join(' · ')}
+                </div>
+              </div>
+              {routines.length > 1 && (
+                <button onClick={() => deleteRoutine(r.id)}
+                  style={{ background: 'rgba(255,76,94,0.12)', border: 'none', borderRadius: 10,
+                    padding: '8px 12px', color: '#FF4C5E', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+                  <Trash2 size={16} />
+                </button>
+              )}
+            </div>
+          ))}
+        </Sheet>
+      )}
+
       <style>{`@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}`}</style>
     </div>
   );
 }
 
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+function MenuItem({ T, icon, label, onClick }) {
+  return (
+    <button onClick={onClick} style={{
+      width: '100%', display: 'flex', alignItems: 'center', gap: 14,
+      padding: '13px 4px', background: 'none', border: 'none',
+      color: T.text, cursor: 'pointer', borderRadius: 12,
+      fontSize: 15, fontWeight: 600, textAlign: 'left',
+    }}>
+      <span style={{ color: T.subtext, display: 'flex' }}>{icon}</span>
+      {label}
+    </button>
+  );
+}
+
+function Divider({ T }) {
+  return <div style={{ height: 1, background: T.divider, margin: '6px 0' }} />;
+}
+
 function Sheet({ T, onClose, title, children, footer }) {
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 100,
-      display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+    <div
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 100,
+        display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+    >
       <div style={{ background: T.modalBg, width: '100%', maxWidth: 420,
         borderRadius: '24px 24px 0 0', padding: '28px 24px 36px',
         maxHeight: '82vh', display: 'flex', flexDirection: 'column',
