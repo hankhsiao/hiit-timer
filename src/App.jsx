@@ -594,7 +594,11 @@ export default function App() {
             stroke={phaseInfo.color} strokeWidth="8"
             strokeDasharray={circumference} strokeDashoffset={ringOffset}
             strokeLinecap="round"
-            style={{ transition: 'stroke-dashoffset 0.95s linear, stroke 0.5s ease' }} />
+            style={{
+              transition: timeLeft === 0
+                ? 'stroke 0.5s ease'
+                : 'stroke-dashoffset 0.95s linear, stroke 0.5s ease',
+            }} />
         </svg>
         <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
           alignItems: 'center', justifyContent: 'center' }}>
