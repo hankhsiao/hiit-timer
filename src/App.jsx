@@ -177,6 +177,8 @@ export default function App() {
   const [dropdownOpen, setDropdownOpen]       = useState(false);
   const [editingId, setEditingId]             = useState(null);
   const [editingName, setEditingName]         = useState('');
+  const [visualFrac, setVisualFrac]           = useState(0);
+  const [visualSec,  setVisualSec]            = useState(0);
 
   const timerRef         = useRef(null);
   const kickRef          = useRef(null);
@@ -184,6 +186,10 @@ export default function App() {
   const announcingRef    = useRef(false);
   const announceFallback = useRef(null);
   const phaseEndRef      = useRef(null);
+  const rafRef           = useRef(null);
+  const phaseStartRef    = useRef(null);
+  const baseElapsedRef   = useRef(0);
+  const phaseDurRef      = useRef(1);
 
   const activeRoutine = routines.find(r => r.id === activeRoutineId) || routines[0];
   const settings      = activeRoutine.settings;
@@ -213,6 +219,24 @@ export default function App() {
     return () => clearInterval(kickRef.current);
   }, [isActive]);
 
+  useEffect(() => {
+    cancelAnimationFrame(rafRef.current);
+    if (!isActive) return;
+    const loop = (now) => {
+      const dur = phaseDurRef.current;
+      if (!phaseStartRef.current || !dur) { rafRef.current = requestAnimationFrame(loop); return; }
+      const sinceResume = (now - phaseStartRef.current) / 1000;
+      const elapsed     = baseElapsedRef.current + sinceResume;
+      const frac        = Math.min(elapsed / dur, 1);
+      const remaining   = Math.max(dur - elapsed, 0);
+      setVisualFrac(frac);
+      setVisualSec(remaining < 0.05 ? 0 : Math.ceil(remaining));
+      rafRef.current = requestAnimationFrame(loop);
+    };
+    rafRef.current = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [isActive, phase]);
+
   const calcTotal = (s = settings) => {
     const ex   = s.exerciseNames.length;
     const m    = s.mode || 'hiit';
@@ -227,7 +251,14 @@ export default function App() {
       - s.restTime * s.rounds + s.roundReset * (s.rounds - 1);
   };
 
-  const startPhase = (p, dur) => { setPhase(p); setTimeLeft(dur); setPhaseDur(dur); };
+  const startPhase = (p, dur) => {
+    phaseStartRef.current  = performance.now();
+    baseElapsedRef.current = 0;
+    phaseDurRef.current    = dur;
+    setVisualFrac(0);
+    setVisualSec(dur);
+    setPhase(p); setTimeLeft(dur); setPhaseDur(dur);
+  };
 
   const transition = () => {
     const { phase, currentEx, currentRound, settings, routineName } = stateRef.current;
@@ -398,9 +429,14 @@ export default function App() {
       announceFallback.current = setTimeout(afterAnnounce, 15000);
     } else {
       if (isActive) {
+        if (phaseStartRef.current) {
+          baseElapsedRef.current += (performance.now() - phaseStartRef.current) / 1000;
+          phaseStartRef.current = null;
+        }
         audioEngine.stopSilentLoop();
         noSleep.disable();
       } else {
+        phaseStartRef.current = performance.now();
         audioEngine.startSilentLoop();
         audioEngine.resume();
         noSleep.enable();
@@ -413,11 +449,15 @@ export default function App() {
     if (announcingRef.current) cancelAnnouncing();
     clearInterval(timerRef.current);
     clearTimeout(phaseEndRef.current);
+    cancelAnimationFrame(rafRef.current);
+    phaseStartRef.current = null;
+    baseElapsedRef.current = 0;
     audioEngine.stopSilentLoop();
     audioEngine.stopSpeech();
     noSleep.disable();
     setIsActive(false); setPhase('IDLE'); setTimeLeft(0); setPhaseDur(1);
     setCurrentEx(0); setCurrentRound(1);
+    setVisualFrac(0); setVisualSec(0);
   };
 
   const switchRoutine = (id) => {
@@ -475,9 +515,8 @@ export default function App() {
 
   const phaseInfo     = PHASES[phase] || PHASES.IDLE;
   const circumference = 2 * Math.PI * 110;
-  const ringFraction  = (phase === 'IDLE' || phase === 'ANNOUNCING' || phase === 'FINISHED' || phaseDur === 0)
-    ? 0 : (phaseDur - timeLeft) / phaseDur;
-  const ringOffset    = circumference * (1 - ringFraction);
+  const ringFraction = (phase === 'IDLE' || phase === 'ANNOUNCING' || phase === 'FINISHED') ? 0 : visualFrac;
+  const ringOffset   = circumference * (1 - ringFraction);
   const isRunning     = phase !== 'IDLE' && phase !== 'FINISHED';
 
   const ib = (extra = {}) => ({
@@ -590,15 +629,11 @@ export default function App() {
       <div style={{ position: 'relative', margin: '32px 0 20px', width: 264, height: 264 }}>
         <svg width="264" height="264" style={{ position: 'absolute', inset: 0, transform: 'rotate(-90deg)' }}>
           <circle cx="132" cy="132" r="110" fill="none" stroke={T.ringTrack} strokeWidth="8" />
-          <circle key={phase} cx="132" cy="132" r="110" fill="none"
+          <circle cx="132" cy="132" r="110" fill="none"
             stroke={phaseInfo.color} strokeWidth="8"
             strokeDasharray={circumference} strokeDashoffset={ringOffset}
             strokeLinecap="round"
-            style={{
-              transition: timeLeft === 0
-                ? 'stroke 0.5s ease'
-                : 'stroke-dashoffset 0.95s linear, stroke 0.5s ease',
-            }} />
+            style={{ transition: 'stroke 0.5s ease' }} />
         </svg>
         <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
           alignItems: 'center', justifyContent: 'center' }}>
@@ -609,7 +644,7 @@ export default function App() {
           <div style={{ fontSize: 68, fontWeight: 900, fontFamily: "'DM Mono', monospace",
             lineHeight: 1, color: T.text,
             transform: pulse ? 'scale(1.05)' : 'scale(1)', transition: 'transform 0.15s' }}>
-            {phase === 'IDLE' || phase === 'ANNOUNCING' ? fmt(calcTotal()) : fmt(timeLeft)}
+            {(phase === 'IDLE' || phase === 'ANNOUNCING') ? fmt(calcTotal()) : fmt(visualSec)}
           </div>
           {phase !== 'IDLE' && phase !== 'ANNOUNCING' && phase !== 'FINISHED' && (
             <div style={{ fontSize: 11, color: T.subtext, fontWeight: 700, marginTop: 10 }}>
