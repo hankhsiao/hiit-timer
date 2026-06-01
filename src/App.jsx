@@ -36,27 +36,27 @@ const DEFAULT_ROUTINES = [
   {
     id: 'hiit',
     name: 'HIIT',
-    settings: { workTime: 30, restTime: 30, rounds: 3, roundReset: 60, exerciseNames: ['開合跳', '波比跳', '登山者', '深蹲跳'] },
+    settings: { workTime: 30, restTime: 30, rounds: 3, roundReset: 60, mode: 'hiit',     exerciseNames: ['開合跳', '波比跳', '登山者', '深蹲跳'] },
   },
   {
     id: 'legs',
     name: '腿臀',
-    settings: { workTime: 45, restTime: 45, rounds: 3, roundReset: 60, exerciseNames: ['高腳杯深蹲', '單腿羅馬尼亞硬舉', '保加利亞分腿蹲'] },
+    settings: { workTime: 45, restTime: 45, rounds: 3, roundReset: 60, mode: 'strength', exerciseNames: ['高腳杯深蹲', '單腿羅馬尼亞硬舉', '保加利亞分腿蹲'] },
   },
   {
     id: 'push',
     name: '推系',
-    settings: { workTime: 45, restTime: 45, rounds: 3, roundReset: 60, exerciseNames: ['深幅度伏地挺身', '地板啞鈴飛鳥', '腳高頭低伏地挺身'] },
+    settings: { workTime: 45, restTime: 45, rounds: 3, roundReset: 60, mode: 'strength', exerciseNames: ['深幅度伏地挺身', '地板啞鈴飛鳥', '腳高頭低伏地挺身'] },
   },
   {
     id: 'pull',
     name: '拉系',
-    settings: { workTime: 45, restTime: 45, rounds: 3, roundReset: 60, exerciseNames: ['單臂啞鈴划船', '仰臥拉舉', '站姿啞鈴二頭彎舉'] },
+    settings: { workTime: 45, restTime: 45, rounds: 3, roundReset: 60, mode: 'strength', exerciseNames: ['單臂啞鈴划船', '仰臥拉舉', '站姿啞鈴二頭彎舉'] },
   },
   {
     id: 'shoulders',
     name: '肩',
-    settings: { workTime: 45, restTime: 45, rounds: 3, roundReset: 60, exerciseNames: ['坐姿啞鈴肩推', '啞鈴側平舉', '俯身飛鳥'] },
+    settings: { workTime: 45, restTime: 45, rounds: 3, roundReset: 60, mode: 'strength', exerciseNames: ['坐姿啞鈴肩推', '啞鈴側平舉', '俯身飛鳥'] },
   },
 ];
 
@@ -128,7 +128,6 @@ class AudioEngine {
     }
   }
 
-  // onEnd fires when speech completes (or immediately if muted / synth unavailable)
   speak(text, onEnd) {
     if (this.muted) { onEnd?.(); return; }
     const synth = window.speechSynthesis;
@@ -177,14 +176,15 @@ export default function App() {
   const [pulse, setPulse]                     = useState(false);
   const [dropdownOpen, setDropdownOpen]       = useState(false);
 
-  const timerRef          = useRef(null);
-  const kickRef           = useRef(null);
-  const stateRef          = useRef({});
-  const announcingRef     = useRef(false);
-  const announceFallback  = useRef(null);
+  const timerRef         = useRef(null);
+  const kickRef          = useRef(null);
+  const stateRef         = useRef({});
+  const announcingRef    = useRef(false);
+  const announceFallback = useRef(null);
 
   const activeRoutine = routines.find(r => r.id === activeRoutineId) || routines[0];
   const settings      = activeRoutine.settings;
+  const mode          = settings.mode || 'hiit';
 
   stateRef.current = { phase, timeLeft, currentEx, currentRound, settings, isActive, phaseDur, routineName: activeRoutine.name };
 
@@ -211,7 +211,15 @@ export default function App() {
   }, [isActive]);
 
   const calcTotal = (s = settings) => {
-    const ex = s.exerciseNames.length;
+    const ex   = s.exerciseNames.length;
+    const m    = s.mode || 'hiit';
+    if (m === 'strength') {
+      // Each exercise: rounds × work + (rounds-1) × rest; between exercises: roundReset
+      return ex * s.rounds * s.workTime
+        + ex * (s.rounds - 1) * s.restTime
+        + (ex - 1) * s.roundReset;
+    }
+    // HIIT: each round cycles all exercises; between rounds: roundReset
     return (s.workTime + s.restTime) * ex * s.rounds
       - s.restTime * s.rounds + s.roundReset * (s.rounds - 1);
   };
@@ -221,40 +229,82 @@ export default function App() {
   const transition = () => {
     const { phase, currentEx, currentRound, settings, routineName } = stateRef.current;
     const { workTime, restTime, roundReset, rounds, exerciseNames } = settings;
-    const lastEx    = currentEx === exerciseNames.length - 1;
+    const m        = settings.mode || 'hiit';
+    const lastEx   = currentEx === exerciseNames.length - 1;
     const lastRound = currentRound === rounds;
     setPulse(true); setTimeout(() => setPulse(false), 300);
 
+    const finishWorkout = () => {
+      setPhase('FINISHED'); setIsActive(false);
+      audioEngine.speak('訓練完成，太棒了');
+      audioEngine.stopSilentLoop();
+      noSleep.disable();
+      const rec = {
+        id: Date.now(),
+        date: new Date().toLocaleDateString('zh-TW'),
+        duration: Math.ceil(calcTotal(settings) / 60),
+        routineName,
+      };
+      setHistory(h => [rec, ...h].slice(0, 20));
+    };
+
     if (phase === 'PREPARING') {
       startPhase('WORK', workTime);
-      audioEngine.speak(`${exerciseNames[0]} 開始`);
+      if (m === 'strength') audioEngine.speak(`${exerciseNames[0]} 第1組，開始`);
+      else                  audioEngine.speak(`${exerciseNames[0]} 開始`);
+
     } else if (phase === 'WORK') {
-      if (!lastEx) {
-        audioEngine.speak(`休息，準備好${exerciseNames[currentEx + 1]}`);
-        startPhase('REST', restTime);
-      } else if (!lastRound) {
-        audioEngine.speak('一組完成，大組休息');
-        startPhase('ROUND_RESET', roundReset);
+      if (m === 'strength') {
+        if (lastRound && lastEx) {
+          finishWorkout();
+        } else if (lastRound) {
+          // All rounds of this exercise done; break before next exercise
+          audioEngine.speak(`${exerciseNames[currentEx]} 完成，準備${exerciseNames[currentEx + 1]}`);
+          startPhase('ROUND_RESET', roundReset);
+        } else {
+          // More rounds of same exercise
+          audioEngine.speak('休息');
+          startPhase('REST', restTime);
+        }
       } else {
-        setPhase('FINISHED'); setIsActive(false);
-        audioEngine.speak('訓練完成，太棒了');
-        audioEngine.stopSilentLoop();
-        noSleep.disable();
-        const rec = {
-          id: Date.now(),
-          date: new Date().toLocaleDateString('zh-TW'),
-          duration: Math.ceil(calcTotal(settings) / 60),
-          routineName,
-        };
-        setHistory(h => [rec, ...h].slice(0, 20));
+        // HIIT
+        if (!lastEx) {
+          audioEngine.speak(`休息，準備好${exerciseNames[currentEx + 1]}`);
+          startPhase('REST', restTime);
+        } else if (!lastRound) {
+          audioEngine.speak('一組完成，大組休息');
+          startPhase('ROUND_RESET', roundReset);
+        } else {
+          finishWorkout();
+        }
       }
+
     } else if (phase === 'REST') {
-      const next = currentEx + 1;
-      setCurrentEx(next); startPhase('WORK', workTime);
-      audioEngine.speak(`${exerciseNames[next]} 開始`);
+      if (m === 'strength') {
+        const nextRound = currentRound + 1;
+        setCurrentRound(nextRound);
+        startPhase('WORK', workTime);
+        audioEngine.speak(`${exerciseNames[currentEx]} 第${nextRound}組，開始`);
+      } else {
+        const nextEx = currentEx + 1;
+        setCurrentEx(nextEx);
+        startPhase('WORK', workTime);
+        audioEngine.speak(`${exerciseNames[nextEx]} 開始`);
+      }
+
     } else if (phase === 'ROUND_RESET') {
-      setCurrentEx(0); setCurrentRound(r => r + 1); startPhase('WORK', workTime);
-      audioEngine.speak(`第 ${currentRound + 1} 組，${exerciseNames[0]} 開始`);
+      if (m === 'strength') {
+        const nextEx = currentEx + 1;
+        setCurrentEx(nextEx);
+        setCurrentRound(1);
+        startPhase('WORK', workTime);
+        audioEngine.speak(`${exerciseNames[nextEx]} 第1組，開始`);
+      } else {
+        setCurrentEx(0);
+        setCurrentRound(r => r + 1);
+        startPhase('WORK', workTime);
+        audioEngine.speak(`第 ${currentRound + 1} 組，${exerciseNames[0]} 開始`);
+      }
     }
   };
 
@@ -263,8 +313,9 @@ export default function App() {
 
     timerRef.current = setInterval(() => {
       setTimeLeft(t => {
-        const { phase, currentEx, settings } = stateRef.current;
+        const { phase, currentEx, currentRound, settings } = stateRef.current;
         const { workTime, exerciseNames } = settings;
+        const m    = settings.mode || 'hiit';
         const next = t - 1;
 
         if (next <= 3) audioEngine.tickBeep(next);
@@ -275,12 +326,21 @@ export default function App() {
         }
 
         if (phase === 'REST' && next === 3) {
-          const nextIdx = currentEx + 1;
-          if (nextIdx < exerciseNames.length) audioEngine.speak(`準備好，${exerciseNames[nextIdx]}`);
+          if (m === 'strength') {
+            audioEngine.speak(`準備，第${currentRound + 1}組`);
+          } else {
+            const ni = currentEx + 1;
+            if (ni < exerciseNames.length) audioEngine.speak(`準備好，${exerciseNames[ni]}`);
+          }
         }
 
         if (phase === 'ROUND_RESET' && next === 3) {
-          audioEngine.speak(`準備好，${exerciseNames[0]}`);
+          if (m === 'strength') {
+            const ni = currentEx + 1;
+            if (ni < exerciseNames.length) audioEngine.speak(`準備，${exerciseNames[ni]}`);
+          } else {
+            audioEngine.speak(`準備好，${exerciseNames[0]}`);
+          }
         }
 
         if (next <= 0) { clearInterval(timerRef.current); transition(); return 0; }
@@ -303,7 +363,6 @@ export default function App() {
   const toggle = () => {
     audioEngine.init();
 
-    // Cancel mid-announcement
     if (phase === 'ANNOUNCING') {
       cancelAnnouncing();
       return;
@@ -311,7 +370,7 @@ export default function App() {
 
     if (phase === 'IDLE' || phase === 'FINISHED') {
       const exList   = settings.exerciseNames.join('，');
-      const roundStr = settings.rounds > 1 ? `共 ${settings.rounds} 組，` : '';
+      const roundStr = settings.rounds > 1 ? `每個動作${settings.rounds}組，` : '';
 
       audioEngine.startSilentLoop();
       noSleep.enable();
@@ -328,7 +387,6 @@ export default function App() {
       };
 
       audioEngine.speak(`今天的訓練：${roundStr}${exList}`, afterAnnounce);
-      // Fallback in case onend never fires (iOS PWA quirk)
       announceFallback.current = setTimeout(afterAnnounce, 15000);
     } else {
       if (isActive) {
@@ -420,74 +478,81 @@ export default function App() {
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,700;9..40,900&family=DM+Mono:wght@500&display=swap" rel="stylesheet" />
 
       {/* ── Header ── */}
-      <div style={{
-        width: '100%', maxWidth: 420, padding: '52px 20px 0',
-        display: 'flex', alignItems: 'center',
-      }}>
-        {/* Left: hamburger menu */}
-        <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-start' }}>
+      <div style={{ width: '100%', maxWidth: 420, padding: '52px 20px 0' }}>
+        {/* Layout row: left/right in flex, centre absolutely overlaid */}
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', height: 44 }}>
+
+          {/* Left: menu */}
           <button
             onClick={e => { e.stopPropagation(); audioEngine.init(); setModal('menu'); }}
-            style={ib()}
+            style={{ ...ib(), zIndex: 1 }}
           >
             <Menu size={20} />
           </button>
-        </div>
 
-        {/* Center: routine dropdown (truly centred) */}
-        <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
-          <button
-            onClick={() => !isRunning && setDropdownOpen(o => !o)}
-            style={{
-              background: 'none', border: 'none',
-              cursor: isRunning ? 'default' : 'pointer',
-              display: 'flex', alignItems: 'center', gap: 5,
-              fontSize: 13, fontWeight: 900, letterSpacing: '0.15em',
-              color: isRunning ? T.subtext : T.text,
-              padding: '6px 8px', borderRadius: 10,
-              transition: 'color 0.3s', textTransform: 'uppercase',
-            }}
-          >
-            {activeRoutine.name}
-            {!isRunning && <ChevronDown size={13} style={{ opacity: 0.55, marginTop: 1 }} />}
-          </button>
-
-          {dropdownOpen && (
-            <div style={{
-              position: 'absolute', top: 'calc(100% + 6px)', left: '50%',
-              transform: 'translateX(-50%)',
-              background: T.modalBg, borderRadius: 14, padding: '6px 0',
-              boxShadow: '0 8px 32px rgba(0,0,0,0.28)', zIndex: 50,
-              minWidth: 140, border: `1px solid ${T.cardBorder}`,
-              animation: 'fadeIn 0.15s ease',
-            }}>
-              {routines.map(r => (
-                <button
-                  key={r.id}
-                  onClick={() => switchRoutine(r.id)}
-                  style={{
-                    width: '100%', padding: '10px 18px', background: 'none', border: 'none',
-                    cursor: 'pointer', textAlign: 'left', display: 'block',
-                    fontSize: 14, fontWeight: r.id === activeRoutineId ? 900 : 600,
-                    color: r.id === activeRoutineId ? phaseInfo.color : T.text,
-                    letterSpacing: '0.04em',
-                  }}
-                >
-                  {r.name}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Right: exercise list */}
-        <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-end' }}>
+          {/* Right: exercise list */}
           <button
             onClick={() => openExercises()}
-            style={{ ...ib(), padding: '10px 16px', gap: 6, fontSize: 13, fontWeight: 700, flexDirection: 'row' }}
+            style={{ ...ib(), marginLeft: 'auto', zIndex: 1, padding: '10px 16px', gap: 6, fontSize: 13, fontWeight: 700, flexDirection: 'row' }}
           >
             <List size={16} /><span>動作清單</span>
           </button>
+
+          {/* Centre overlay — always geometrically centred, never shifts layout */}
+          <div
+            style={{
+              position: 'absolute', left: 0, right: 0, top: 0, bottom: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              pointerEvents: 'none',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ position: 'relative', pointerEvents: 'auto' }}>
+              <button
+                onClick={() => !isRunning && setDropdownOpen(o => !o)}
+                style={{
+                  background: 'none', border: 'none',
+                  cursor: isRunning ? 'default' : 'pointer',
+                  display: 'flex', alignItems: 'center', gap: 5,
+                  fontSize: 13, fontWeight: 900, letterSpacing: '0.15em',
+                  color: isRunning ? T.subtext : T.text,
+                  padding: '6px 8px', borderRadius: 10,
+                  transition: 'color 0.3s', textTransform: 'uppercase',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {activeRoutine.name}
+                {!isRunning && <ChevronDown size={13} style={{ opacity: 0.55, marginTop: 1 }} />}
+              </button>
+
+              {dropdownOpen && (
+                <div style={{
+                  position: 'absolute', top: 'calc(100% + 6px)', left: '50%',
+                  transform: 'translateX(-50%)',
+                  background: T.modalBg, borderRadius: 14, padding: '6px 0',
+                  boxShadow: '0 8px 32px rgba(0,0,0,0.28)', zIndex: 50,
+                  minWidth: 140, border: `1px solid ${T.cardBorder}`,
+                  animation: 'fadeIn 0.12s ease',
+                }}>
+                  {routines.map(r => (
+                    <button
+                      key={r.id}
+                      onClick={() => switchRoutine(r.id)}
+                      style={{
+                        width: '100%', padding: '10px 18px', background: 'none', border: 'none',
+                        cursor: 'pointer', textAlign: 'left', display: 'block',
+                        fontSize: 14, fontWeight: r.id === activeRoutineId ? 900 : 600,
+                        color: r.id === activeRoutineId ? phaseInfo.color : T.text,
+                        letterSpacing: '0.04em', whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {r.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -514,7 +579,9 @@ export default function App() {
           </div>
           {phase !== 'IDLE' && phase !== 'ANNOUNCING' && phase !== 'FINISHED' && (
             <div style={{ fontSize: 11, color: T.subtext, fontWeight: 700, marginTop: 10 }}>
-              第 {currentRound} 組 / 共 {settings.rounds} 組
+              {mode === 'strength'
+                ? `第 ${currentRound} 組 / 共 ${settings.rounds} 組`
+                : `第 ${currentRound} 組 / 共 ${settings.rounds} 組`}
             </div>
           )}
           {(phase === 'IDLE' || phase === 'ANNOUNCING') && (
@@ -567,10 +634,32 @@ export default function App() {
 
       {/* ── Settings cards ── */}
       <div style={{ width: '100%', maxWidth: 420, padding: '0 20px 48px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {/* Mode toggle */}
+        <div style={cardS}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ color: '#4C6EF5' }}><Zap size={18} /></div>
+            <span style={{ fontSize: 15, fontWeight: 700, color: T.text }}>模式</span>
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {[['hiit', 'HIIT'], ['strength', '重訓']].map(([m, label]) => (
+              <button key={m}
+                onClick={() => updateSettings(s => ({ ...s, mode: m }))}
+                style={{
+                  padding: '6px 14px', borderRadius: 20, border: 'none', cursor: 'pointer',
+                  background: mode === m ? '#4C6EF5' : T.iconBtn,
+                  color: mode === m ? '#fff' : T.subtext,
+                  fontSize: 12, fontWeight: 800, transition: 'background 0.2s, color 0.2s',
+                }}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {[
           { label: 'Work',        key: 'workTime',      icon: <Activity  size={18} />, color: '#FF4C5E', isTime: true  },
           { label: 'Rest',        key: 'restTime',      icon: <Timer     size={18} />, color: '#20C997', isTime: true  },
-          { label: 'Exercises',   key: 'exerciseNames', icon: <Zap       size={18} />, color: '#748FFC', readOnly: true, display: `${settings.exerciseNames.length} 個動作`, onCardClick: openExercises },
+          { label: 'Exercises',   key: 'exerciseNames', icon: <List      size={18} />, color: '#748FFC', readOnly: true, display: `${settings.exerciseNames.length} 個動作`, onCardClick: openExercises },
           { label: 'Rounds',      key: 'rounds',        icon: <RefreshCw size={18} />, color: '#748FFC', isTime: false },
           { label: 'Round Reset', key: 'roundReset',    icon: <Clock     size={18} />, color: '#F59F00', isTime: true  },
         ].map(item => (
@@ -609,7 +698,6 @@ export default function App() {
 
       {/* ════════ Modals ════════ */}
 
-      {/* Menu */}
       {modal === 'menu' && (
         <Sheet T={T} onClose={() => setModal(null)} title="選單">
           <MenuItem T={T}
@@ -631,7 +719,6 @@ export default function App() {
         </Sheet>
       )}
 
-      {/* History */}
       {modal === 'history' && (
         <Sheet T={T} onClose={() => setModal(null)} title="訓練紀錄">
           {history.length === 0
@@ -652,7 +739,6 @@ export default function App() {
         </Sheet>
       )}
 
-      {/* Exercises */}
       {modal === 'exercises' && (
         <Sheet T={T} onClose={() => setModal(null)} title="動作清單"
           footer={
@@ -685,7 +771,6 @@ export default function App() {
         </Sheet>
       )}
 
-      {/* Add Routine */}
       {modal === 'addRoutine' && (
         <Sheet T={T} onClose={() => setModal(null)} title="新增課表"
           footer={
@@ -711,7 +796,6 @@ export default function App() {
         </Sheet>
       )}
 
-      {/* Manage Routines */}
       {modal === 'manageRoutines' && (
         <Sheet T={T} onClose={() => setModal(null)} title="管理課表">
           {routines.map(r => (
