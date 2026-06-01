@@ -422,17 +422,19 @@ export default function App() {
       {/* ── Header ── */}
       <div style={{
         width: '100%', maxWidth: 420, padding: '52px 20px 0',
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        display: 'flex', alignItems: 'center',
       }}>
-        {/* Left: exercise list */}
-        <button
-          onClick={() => openExercises()}
-          style={{ ...ib(), padding: '10px 16px', gap: 6, fontSize: 13, fontWeight: 700, flexDirection: 'row' }}
-        >
-          <List size={16} /><span>動作清單</span>
-        </button>
+        {/* Left: hamburger menu */}
+        <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-start' }}>
+          <button
+            onClick={e => { e.stopPropagation(); audioEngine.init(); setModal('menu'); }}
+            style={ib()}
+          >
+            <Menu size={20} />
+          </button>
+        </div>
 
-        {/* Center: routine dropdown */}
+        {/* Center: routine dropdown (truly centred) */}
         <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
           <button
             onClick={() => !isRunning && setDropdownOpen(o => !o)}
@@ -478,13 +480,15 @@ export default function App() {
           )}
         </div>
 
-        {/* Right: hamburger menu */}
-        <button
-          onClick={e => { e.stopPropagation(); audioEngine.init(); setModal('menu'); }}
-          style={ib()}
-        >
-          <Menu size={20} />
-        </button>
+        {/* Right: exercise list */}
+        <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-end' }}>
+          <button
+            onClick={() => openExercises()}
+            style={{ ...ib(), padding: '10px 16px', gap: 6, fontSize: 13, fontWeight: 700, flexDirection: 'row' }}
+          >
+            <List size={16} /><span>動作清單</span>
+          </button>
+        </div>
       </div>
 
       {/* ── Ring ── */}
