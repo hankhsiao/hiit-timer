@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   Play, Pause, RotateCcw, Activity, Timer, RefreshCw,
   History, Volume2, VolumeX, Zap, List, Trophy, Clock,
-  X, Plus, Minus, Sun, Moon, Menu, ChevronDown, Trash2
+  X, Plus, Minus, Sun, Moon, Menu, ChevronDown, ChevronUp, Trash2, Pencil
 } from 'lucide-react';
 import NoSleep from 'nosleep.js';
 
@@ -175,6 +175,8 @@ export default function App() {
   const [newRoutineName, setNewRoutineName]   = useState('');
   const [pulse, setPulse]                     = useState(false);
   const [dropdownOpen, setDropdownOpen]       = useState(false);
+  const [editingId, setEditingId]             = useState(null);
+  const [editingName, setEditingName]         = useState('');
 
   const timerRef         = useRef(null);
   const kickRef          = useRef(null);
@@ -425,6 +427,27 @@ export default function App() {
     setActiveRoutineId(id);
     setModal(null);
     setNewRoutineName('');
+  };
+
+  const moveRoutine = (id, dir) => {
+    setRoutines(rs => {
+      const i = rs.findIndex(r => r.id === id);
+      if (dir === 'up' && i === 0) return rs;
+      if (dir === 'down' && i === rs.length - 1) return rs;
+      const next = [...rs];
+      const swap = dir === 'up' ? i - 1 : i + 1;
+      [next[i], next[swap]] = [next[swap], next[i]];
+      return next;
+    });
+  };
+
+  const saveRename = () => {
+    const name = editingName.trim();
+    if (name && editingId) {
+      setRoutines(rs => rs.map(r => r.id === editingId ? { ...r, name } : r));
+    }
+    setEditingId(null);
+    setEditingName('');
   };
 
   const deleteRoutine = (id) => {
@@ -797,32 +820,76 @@ export default function App() {
       )}
 
       {modal === 'manageRoutines' && (
-        <Sheet T={T} onClose={() => setModal(null)} title="管理課表">
-          {routines.map(r => (
-            <div key={r.id} style={{
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              padding: '13px 0', borderBottom: `1px solid ${T.divider}`,
-            }}>
-              <div style={{ flex: 1, minWidth: 0, marginRight: 12 }}>
-                <div style={{ fontWeight: 700, fontSize: 15, color: r.id === activeRoutineId ? '#FF4C5E' : T.text, display: 'flex', alignItems: 'center', gap: 8 }}>
-                  {r.name}
-                  {r.id === activeRoutineId && (
-                    <span style={{ fontSize: 10, color: T.subtext, fontWeight: 600 }}>使用中</span>
-                  )}
-                </div>
-                <div style={{ fontSize: 11, color: T.subtext, marginTop: 3,
-                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {r.settings.exerciseNames.join(' · ')}
-                </div>
-              </div>
-              {routines.length > 1 && (
-                <button onClick={() => deleteRoutine(r.id)}
-                  style={{ background: 'rgba(255,76,94,0.12)', border: 'none', borderRadius: 10,
-                    padding: '8px 12px', color: '#FF4C5E', cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', flexShrink: 0 }}>
-                  <Trash2 size={16} />
+        <Sheet T={T} onClose={() => { setModal(null); setEditingId(null); }} title="管理課表">
+          {routines.map((r, i) => (
+            <div key={r.id} style={{ padding: '12px 0', borderBottom: `1px solid ${T.divider}` }}>
+              {/* Name row */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                {editingId === r.id ? (
+                  <input
+                    autoFocus
+                    value={editingName}
+                    onChange={e => setEditingName(e.target.value)}
+                    onBlur={saveRename}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.target.blur(); } }}
+                    style={{
+                      flex: 1, background: T.inputBg, border: `1px solid ${T.inputBorder}`,
+                      borderRadius: 10, padding: '7px 12px', color: T.inputText,
+                      fontSize: 15, fontWeight: 700, outline: 'none', fontFamily: 'inherit',
+                    }}
+                  />
+                ) : (
+                  <button
+                    onClick={() => { setEditingId(r.id); setEditingName(r.name); }}
+                    style={{
+                      flex: 1, background: 'none', border: 'none', cursor: 'pointer',
+                      textAlign: 'left', padding: '4px 0', display: 'flex', alignItems: 'center', gap: 8,
+                    }}
+                  >
+                    <span style={{ fontWeight: 700, fontSize: 15, color: r.id === activeRoutineId ? '#FF4C5E' : T.text }}>
+                      {r.name}
+                    </span>
+                    {r.id === activeRoutineId && (
+                      <span style={{ fontSize: 10, color: T.subtext, fontWeight: 600 }}>使用中</span>
+                    )}
+                    <Pencil size={12} style={{ color: T.subtext, opacity: 0.6, marginLeft: 2 }} />
+                  </button>
+                )}
+
+                {/* Up / Down / Delete */}
+                <button
+                  onClick={() => moveRoutine(r.id, 'up')}
+                  style={{ background: T.iconBtn, border: 'none', borderRadius: 8, padding: '6px 8px',
+                    cursor: i === 0 ? 'default' : 'pointer', color: T.text,
+                    opacity: i === 0 ? 0.2 : 1, display: 'flex', alignItems: 'center', flexShrink: 0 }}
+                >
+                  <ChevronUp size={15} />
                 </button>
-              )}
+                <button
+                  onClick={() => moveRoutine(r.id, 'down')}
+                  style={{ background: T.iconBtn, border: 'none', borderRadius: 8, padding: '6px 8px',
+                    cursor: i === routines.length - 1 ? 'default' : 'pointer', color: T.text,
+                    opacity: i === routines.length - 1 ? 0.2 : 1, display: 'flex', alignItems: 'center', flexShrink: 0 }}
+                >
+                  <ChevronDown size={15} />
+                </button>
+                {routines.length > 1 && (
+                  <button
+                    onClick={() => deleteRoutine(r.id)}
+                    style={{ background: 'rgba(255,76,94,0.12)', border: 'none', borderRadius: 8,
+                      padding: '6px 8px', color: '#FF4C5E', cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', flexShrink: 0 }}
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                )}
+              </div>
+
+              {/* Exercise preview */}
+              <div style={{ fontSize: 11, color: T.subtext, marginTop: 5,
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingLeft: 2 }}>
+                {r.settings.exerciseNames.join(' · ')}
+              </div>
             </div>
           ))}
         </Sheet>
