@@ -183,6 +183,7 @@ export default function App() {
   const stateRef         = useRef({});
   const announcingRef    = useRef(false);
   const announceFallback = useRef(null);
+  const phaseEndRef      = useRef(null);
 
   const activeRoutine = routines.find(r => r.id === activeRoutineId) || routines[0];
   const settings      = activeRoutine.settings;
@@ -345,7 +346,12 @@ export default function App() {
           }
         }
 
-        if (next <= 0) { clearInterval(timerRef.current); transition(); return 0; }
+        if (next <= 0) {
+          clearInterval(timerRef.current);
+          // Show ring fully closed for 350ms before the next phase starts
+          phaseEndRef.current = setTimeout(transition, 350);
+          return 0;
+        }
         return next;
       });
     }, 1000);
@@ -406,6 +412,7 @@ export default function App() {
   const reset = () => {
     if (announcingRef.current) cancelAnnouncing();
     clearInterval(timerRef.current);
+    clearTimeout(phaseEndRef.current);
     audioEngine.stopSilentLoop();
     audioEngine.stopSpeech();
     noSleep.disable();
@@ -583,7 +590,7 @@ export default function App() {
       <div style={{ position: 'relative', margin: '32px 0 20px', width: 264, height: 264 }}>
         <svg width="264" height="264" style={{ position: 'absolute', inset: 0, transform: 'rotate(-90deg)' }}>
           <circle cx="132" cy="132" r="110" fill="none" stroke={T.ringTrack} strokeWidth="8" />
-          <circle cx="132" cy="132" r="110" fill="none"
+          <circle key={phase} cx="132" cy="132" r="110" fill="none"
             stroke={phaseInfo.color} strokeWidth="8"
             strokeDasharray={circumference} strokeDashoffset={ringOffset}
             strokeLinecap="round"
