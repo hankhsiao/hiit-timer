@@ -1,6 +1,6 @@
 {
   "name": "HIIT Timer",
-  "short_name": "HIIT",
+  "short_name": "HIIT Timer",
   "description": "高強度間歇訓練計時器",
   "start_url": "/",
   "display": "standalone",
