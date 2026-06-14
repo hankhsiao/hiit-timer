@@ -1,0 +1,24 @@
+{
+  "name": "HIIT Timer",
+  "short_name": "HIIT Timer",
+  "description": "高強度間歇訓練計時器",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#C06845",
+  "theme_color": "#0D0D12",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

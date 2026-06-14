@@ -160,6 +160,13 @@ export default function App() {
   }, []);
   const T = darkMode ? DARK : LIGHT;
 
+  useEffect(() => {
+    document.documentElement.style.background = T.bg;
+    document.body.style.background = T.bg;
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.content = T.bg;
+  }, [T.bg]);
+
   const [routines, setRoutines]               = useState(() => load('hiit_routines', DEFAULT_ROUTINES));
   const [activeRoutineId, setActiveRoutineId] = useState(() => load('hiit_active_routine', 'hiit'));
   const [history, setHistory]                 = useState(() => load('hiit_history', []));
@@ -538,7 +545,7 @@ export default function App() {
   return (
     <div
       style={{
-        fontFamily: "'DM Sans', sans-serif", background: T.bg, minHeight: '100vh',
+        fontFamily: "'DM Sans', sans-serif", background: T.bg, minHeight: '100dvh',
         display: 'flex', flexDirection: 'column', alignItems: 'center',
         color: T.text, userSelect: 'none', transition: 'background 0.35s, color 0.35s',
       }}
@@ -547,7 +554,7 @@ export default function App() {
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,700;9..40,900&family=DM+Mono:wght@500&display=swap" rel="stylesheet" />
 
       {/* ── Header ── */}
-      <div style={{ width: '100%', maxWidth: 420, padding: '52px 20px 0' }}>
+      <div style={{ width: '100%', maxWidth: 420, padding: 'calc(env(safe-area-inset-top, 0px) + 12px) 20px 0' }}>
         {/* Layout row: left/right in flex, centre absolutely overlaid */}
         <div style={{ position: 'relative', display: 'flex', alignItems: 'center', height: 44 }}>
 
@@ -702,7 +709,7 @@ export default function App() {
       </div>
 
       {/* ── Settings cards ── */}
-      <div style={{ width: '100%', maxWidth: 420, padding: '0 20px 48px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ width: '100%', maxWidth: 420, padding: `0 20px calc(env(safe-area-inset-bottom, 0px) + 32px)`, display: 'flex', flexDirection: 'column', gap: 10 }}>
         {/* Mode toggle */}
         <div style={cardS}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -980,7 +987,7 @@ function Sheet({ T, onClose, title, children, footer }) {
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div style={{ background: T.modalBg, width: '100%', maxWidth: 420,
-        borderRadius: '24px 24px 0 0', padding: '28px 24px 36px',
+        borderRadius: '24px 24px 0 0', padding: `28px 24px calc(env(safe-area-inset-bottom, 0px) + 28px)`,
         maxHeight: '82vh', display: 'flex', flexDirection: 'column',
         boxShadow: '0 -8px 40px rgba(0,0,0,0.2)', transition: 'background 0.3s',
         overflowY: 'auto' }}>

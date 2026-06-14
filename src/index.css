@@ -1,2 +1,7 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-body { -webkit-tap-highlight-color: transparent; }
+html { background: #0D0D12; }
+html, body { height: 100%; }
+body {
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
