@@ -35,28 +35,28 @@ const PHASES = {
 const DEFAULT_ROUTINES = [
   {
     id: 'hiit',
-    name: '🔥 HIIT',
-    settings: { workTime: 30, restTime: 30, rounds: 3, roundReset: 60, mode: 'hiit',     exerciseNames: ['🤸 開合跳', '⚡ 波比跳', '🏔️ 登山者', '🦵 深蹲跳'] },
+    name: 'HIIT',
+    settings: { workTime: 30, restTime: 30, rounds: 3, roundReset: 60, mode: 'hiit',     exerciseNames: ['開合跳', '波比跳', '登山者', '深蹲跳'] },
   },
   {
     id: 'legs',
-    name: '🦵 腿臀',
-    settings: { workTime: 45, restTime: 45, rounds: 3, roundReset: 60, mode: 'strength', exerciseNames: ['🏋️ 高腳杯深蹲', '🦵 單腿羅馬尼亞硬舉', '🔥 保加利亞分腿蹲'] },
+    name: '腿臀',
+    settings: { workTime: 45, restTime: 45, rounds: 3, roundReset: 60, mode: 'strength', exerciseNames: ['高腳杯深蹲', '單腿羅馬尼亞硬舉', '保加利亞分腿蹲'] },
   },
   {
     id: 'push',
-    name: '💪 推系',
-    settings: { workTime: 45, restTime: 45, rounds: 3, roundReset: 60, mode: 'strength', exerciseNames: ['💪 深幅度伏地挺身', '🏋️ 地板啞鈴飛鳥', '💪 腳高頭低伏地挺身'] },
+    name: '推系',
+    settings: { workTime: 45, restTime: 45, rounds: 3, roundReset: 60, mode: 'strength', exerciseNames: ['深幅度伏地挺身', '地板啞鈴飛鳥', '腳高頭低伏地挺身'] },
   },
   {
     id: 'pull',
-    name: '🤸 拉系',
-    settings: { workTime: 45, restTime: 45, rounds: 3, roundReset: 60, mode: 'strength', exerciseNames: ['💪 單臂啞鈴划船', '🤸 仰臥拉舉', '💪 站姿啞鈴二頭彎舉'] },
+    name: '拉系',
+    settings: { workTime: 45, restTime: 45, rounds: 3, roundReset: 60, mode: 'strength', exerciseNames: ['單臂啞鈴划船', '仰臥拉舉', '站姿啞鈴二頭彎舉'] },
   },
   {
     id: 'shoulders',
-    name: '🏋️ 肩',
-    settings: { workTime: 45, restTime: 45, rounds: 3, roundReset: 60, mode: 'strength', exerciseNames: ['🏋️ 坐姿啞鈴肩推', '💪 啞鈴側平舉', '🦅 俯身飛鳥'] },
+    name: '肩',
+    settings: { workTime: 45, restTime: 45, rounds: 3, roundReset: 60, mode: 'strength', exerciseNames: ['坐姿啞鈴肩推', '啞鈴側平舉', '俯身飛鳥'] },
   },
 ];
 
