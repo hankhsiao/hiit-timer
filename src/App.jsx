@@ -35,28 +35,28 @@ const PHASES = {
 const DEFAULT_ROUTINES = [
   {
     id: 'hiit',
-    name: 'HIIT',
-    settings: { workTime: 30, restTime: 30, rounds: 3, roundReset: 60, mode: 'hiit',     exerciseNames: ['開合跳', '波比跳', '登山者', '深蹲跳'] },
+    name: '🔥 HIIT',
+    settings: { workTime: 30, restTime: 30, rounds: 3, roundReset: 60, mode: 'hiit',     exerciseNames: ['🤸 開合跳', '⚡ 波比跳', '🏔️ 登山者', '🦵 深蹲跳'] },
   },
   {
     id: 'legs',
-    name: '腿臀',
-    settings: { workTime: 45, restTime: 45, rounds: 3, roundReset: 60, mode: 'strength', exerciseNames: ['高腳杯深蹲', '單腿羅馬尼亞硬舉', '保加利亞分腿蹲'] },
+    name: '🦵 腿臀',
+    settings: { workTime: 45, restTime: 45, rounds: 3, roundReset: 60, mode: 'strength', exerciseNames: ['🏋️ 高腳杯深蹲', '🦵 單腿羅馬尼亞硬舉', '🔥 保加利亞分腿蹲'] },
   },
   {
     id: 'push',
-    name: '推系',
-    settings: { workTime: 45, restTime: 45, rounds: 3, roundReset: 60, mode: 'strength', exerciseNames: ['深幅度伏地挺身', '地板啞鈴飛鳥', '腳高頭低伏地挺身'] },
+    name: '💪 推系',
+    settings: { workTime: 45, restTime: 45, rounds: 3, roundReset: 60, mode: 'strength', exerciseNames: ['💪 深幅度伏地挺身', '🏋️ 地板啞鈴飛鳥', '💪 腳高頭低伏地挺身'] },
   },
   {
     id: 'pull',
-    name: '拉系',
-    settings: { workTime: 45, restTime: 45, rounds: 3, roundReset: 60, mode: 'strength', exerciseNames: ['單臂啞鈴划船', '仰臥拉舉', '站姿啞鈴二頭彎舉'] },
+    name: '🤸 拉系',
+    settings: { workTime: 45, restTime: 45, rounds: 3, roundReset: 60, mode: 'strength', exerciseNames: ['💪 單臂啞鈴划船', '🤸 仰臥拉舉', '💪 站姿啞鈴二頭彎舉'] },
   },
   {
     id: 'shoulders',
-    name: '肩',
-    settings: { workTime: 45, restTime: 45, rounds: 3, roundReset: 60, mode: 'strength', exerciseNames: ['坐姿啞鈴肩推', '啞鈴側平舉', '俯身飛鳥'] },
+    name: '🏋️ 肩',
+    settings: { workTime: 45, restTime: 45, rounds: 3, roundReset: 60, mode: 'strength', exerciseNames: ['🏋️ 坐姿啞鈴肩推', '💪 啞鈴側平舉', '🦅 俯身飛鳥'] },
   },
 ];
 
@@ -159,6 +159,13 @@ export default function App() {
     mq.addEventListener('change', h); return () => mq.removeEventListener('change', h);
   }, []);
   const T = darkMode ? DARK : LIGHT;
+
+  useEffect(() => {
+    document.documentElement.style.background = T.bg;
+    document.body.style.background = T.bg;
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.content = T.bg;
+  }, [T.bg]);
 
   const [routines, setRoutines]               = useState(() => load('hiit_routines', DEFAULT_ROUTINES));
   const [activeRoutineId, setActiveRoutineId] = useState(() => load('hiit_active_routine', 'hiit'));
@@ -538,7 +545,7 @@ export default function App() {
   return (
     <div
       style={{
-        fontFamily: "'DM Sans', sans-serif", background: T.bg, minHeight: '100vh',
+        fontFamily: "'DM Sans', sans-serif", background: T.bg, minHeight: '100dvh',
         display: 'flex', flexDirection: 'column', alignItems: 'center',
         color: T.text, userSelect: 'none', transition: 'background 0.35s, color 0.35s',
       }}
@@ -547,7 +554,7 @@ export default function App() {
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,700;9..40,900&family=DM+Mono:wght@500&display=swap" rel="stylesheet" />
 
       {/* ── Header ── */}
-      <div style={{ width: '100%', maxWidth: 420, padding: '52px 20px 0' }}>
+      <div style={{ width: '100%', maxWidth: 420, padding: 'calc(env(safe-area-inset-top, 0px) + 12px) 20px 0' }}>
         {/* Layout row: left/right in flex, centre absolutely overlaid */}
         <div style={{ position: 'relative', display: 'flex', alignItems: 'center', height: 44 }}>
 
@@ -702,7 +709,7 @@ export default function App() {
       </div>
 
       {/* ── Settings cards ── */}
-      <div style={{ width: '100%', maxWidth: 420, padding: '0 20px 48px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ width: '100%', maxWidth: 420, padding: `0 20px calc(env(safe-area-inset-bottom, 0px) + 32px)`, display: 'flex', flexDirection: 'column', gap: 10 }}>
         {/* Mode toggle */}
         <div style={cardS}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -980,7 +987,7 @@ function Sheet({ T, onClose, title, children, footer }) {
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div style={{ background: T.modalBg, width: '100%', maxWidth: 420,
-        borderRadius: '24px 24px 0 0', padding: '28px 24px 36px',
+        borderRadius: '24px 24px 0 0', padding: `28px 24px calc(env(safe-area-inset-bottom, 0px) + 28px)`,
         maxHeight: '82vh', display: 'flex', flexDirection: 'column',
         boxShadow: '0 -8px 40px rgba(0,0,0,0.2)', transition: 'background 0.3s',
         overflowY: 'auto' }}>
