@@ -13,6 +13,7 @@ const DARK = {
   inputBg: 'rgba(255,255,255,0.07)', inputBorder: 'rgba(255,255,255,0.1)', inputText: '#fff',
   modalBg: '#1C1C26', divider: 'rgba(255,255,255,0.06)',
   iconBtn: 'rgba(255,255,255,0.09)', ringTrack: 'rgba(255,255,255,0.06)', glow: true,
+  headerBg: 'rgba(13,13,18,0.72)', headerBorder: 'rgba(255,255,255,0.08)',
 };
 const LIGHT = {
   bg: '#F0F0F5', card: '#FFFFFF', cardBorder: 'rgba(0,0,0,0.06)',
@@ -20,6 +21,7 @@ const LIGHT = {
   inputBg: 'rgba(0,0,0,0.04)', inputBorder: 'rgba(0,0,0,0.1)', inputText: '#111',
   modalBg: '#FFFFFF', divider: 'rgba(0,0,0,0.07)',
   iconBtn: 'rgba(0,0,0,0.07)', ringTrack: 'rgba(0,0,0,0.07)', glow: false,
+  headerBg: 'rgba(240,240,245,0.72)', headerBorder: 'rgba(0,0,0,0.07)',
 };
 
 const PHASES = {
@@ -553,10 +555,19 @@ export default function App() {
     >
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,700;9..40,900&family=DM+Mono:wght@500&display=swap" rel="stylesheet" />
 
-      {/* ── Header ── */}
-      <div style={{ width: '100%', maxWidth: 420, padding: 'calc(env(safe-area-inset-top, 0px) + 12px) 20px 0' }}>
+      {/* ── Header (sticky app bar) ── */}
+      <div style={{
+        position: 'sticky', top: 0, zIndex: 40, width: '100%',
+        display: 'flex', justifyContent: 'center',
+        background: T.headerBg,
+        backdropFilter: 'blur(20px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+        borderBottom: `1px solid ${T.headerBorder}`,
+        padding: 'calc(env(safe-area-inset-top, 0px) + 10px) 20px 10px',
+        transition: 'background 0.35s, border-color 0.35s',
+      }}>
         {/* Layout row: left/right in flex, centre absolutely overlaid */}
-        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', height: 44 }}>
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', height: 44, width: '100%', maxWidth: 380 }}>
 
           {/* Left: menu */}
           <button
