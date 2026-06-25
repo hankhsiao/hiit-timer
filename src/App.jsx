@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   Play, Pause, RotateCcw, Activity, Timer, RefreshCw,
   History, Volume2, VolumeX, Zap, List, Trophy, Clock,
-  X, Plus, Minus, Sun, Moon, Menu, ChevronDown, ChevronUp, Trash2, Pencil
+  X, Plus, Minus, Sun, Moon, Menu, ChevronDown, ChevronUp, Trash2, Pencil, SkipForward
 } from 'lucide-react';
 import NoSleep from 'nosleep.js';
 
@@ -469,6 +469,24 @@ export default function App() {
     setVisualFrac(0); setVisualSec(0);
   };
 
+  // Skip the current phase and jump straight to the next one.
+  // Doubles as a manual rescue if the countdown ever stalls.
+  const skipToNext = () => {
+    const p = stateRef.current.phase;
+    if (p !== 'PREPARING' && p !== 'WORK' && p !== 'REST' && p !== 'ROUND_RESET') return;
+    clearInterval(timerRef.current);
+    clearTimeout(phaseEndRef.current);
+    audioEngine.stopSpeech();
+    // If we were paused, resume the workout as we advance.
+    if (!stateRef.current.isActive) {
+      audioEngine.startSilentLoop();
+      audioEngine.resume();
+      noSleep.enable();
+      setIsActive(true);
+    }
+    transition();
+  };
+
   const switchRoutine = (id) => {
     reset();
     setActiveRoutineId(id);
@@ -716,7 +734,14 @@ export default function App() {
             ? <Pause size={30} color="#fff" fill="#fff" />
             : <Play  size={30} color="#fff" fill="#fff" style={{ transform: 'translateX(2px)' }} />}
         </button>
-        <div style={{ width: 52 }} />
+        {phase === 'PREPARING' || phase === 'WORK' || phase === 'REST' || phase === 'ROUND_RESET'
+          ? <button onClick={skipToNext} title="跳到下一個" aria-label="跳到下一個"
+              style={{ width: 52, height: 52, borderRadius: '50%',
+                background: T.iconBtn, border: 'none', color: T.text, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <SkipForward size={20} />
+            </button>
+          : <div style={{ width: 52 }} />}
       </div>
 
       {/* ── Settings cards ── */}
