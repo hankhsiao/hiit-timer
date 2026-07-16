@@ -57,8 +57,13 @@ const DEFAULT_ROUTINES = [
   },
   {
     id: 'shoulders',
-    name: '肩',
+    name: '肩膀',
     settings: { workTime: 45, restTime: 45, rounds: 3, roundReset: 60, mode: 'strength', exerciseNames: ['坐姿啞鈴肩推', '啞鈴側平舉', '俯身飛鳥'] },
+  },
+  {
+    id: 'stretch',
+    name: '伸展',
+    settings: { workTime: 45, restTime: 10, rounds: 1, roundReset: 15, mode: 'strength', exerciseNames: ['門框胸部伸展', '上斜方肌與頸部伸展（左）', '上斜方肌與頸部伸展（右）', '貓牛式（Cat-Cow）', '單膝跪地髖屈肌伸展（左）', '單膝跪地髖屈肌伸展（右）', '數字4伸展（左）', '數字4伸展（右）', '坐姿腿後側伸展（左）', '坐姿腿後側伸展（右）'] },
   },
 ];
 
