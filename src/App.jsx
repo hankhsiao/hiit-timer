@@ -70,6 +70,16 @@ const DEFAULT_ROUTINES = [
 function load(key, fb) {
   try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fb; } catch { return fb; }
 }
+// Merge saved routines with DEFAULT_ROUTINES: keep every saved routine as-is
+// (never overwrite the user's edits) and append any new default routines whose
+// id isn't already present. This lets newly added defaults reach existing users.
+function loadRoutines() {
+  const saved = load('hiit_routines', null);
+  if (!Array.isArray(saved)) return DEFAULT_ROUTINES;
+  const existingIds = new Set(saved.map(r => r.id));
+  const missing = DEFAULT_ROUTINES.filter(r => !existingIds.has(r.id));
+  return missing.length ? [...saved, ...missing] : saved;
+}
 function fmt(s) {
   return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 }
@@ -174,7 +184,7 @@ export default function App() {
     if (meta) meta.content = T.bg;
   }, [T.bg]);
 
-  const [routines, setRoutines]               = useState(() => load('hiit_routines', DEFAULT_ROUTINES));
+  const [routines, setRoutines]               = useState(loadRoutines);
   const [activeRoutineId, setActiveRoutineId] = useState(() => load('hiit_active_routine', 'hiit'));
   const [history, setHistory]                 = useState(() => load('hiit_history', []));
   const [phase, setPhase]                     = useState('IDLE');
