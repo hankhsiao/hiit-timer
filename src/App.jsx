@@ -90,7 +90,6 @@ class AudioEngine {
     this.ctx = null;
     this.silentAudio = null;
     this.muted = false;
-    this.speakTimer = null;
   }
 
   init() {
@@ -113,15 +112,7 @@ class AudioEngine {
   }
 
   stopSpeech() {
-    clearTimeout(this.speakTimer);
-    const synth = window.speechSynthesis;
-    if (!synth) return;
-    synth.cancel();
-    // cancel() clears the queue but can leave the engine stuck in a "paused"
-    // state (the kickSynth pause/resume hack or a browser auto-pause). If it
-    // stays paused, every later speak() is silenced — e.g. after 重來/reset.
-    // resume() clears that flag so the next utterance actually plays.
-    synth.resume();
+    window.speechSynthesis?.cancel();
   }
 
   async resume() {
@@ -158,27 +149,11 @@ class AudioEngine {
     if (this.muted) { onEnd?.(); return; }
     const synth = window.speechSynthesis;
     if (!synth) { onEnd?.(); return; }
-
+    synth.cancel();
     const u = new SpeechSynthesisUtterance(text);
     u.lang = 'zh-TW'; u.rate = 1.1; u.volume = 1;
     if (onEnd) { u.onend = onEnd; u.onerror = onEnd; }
-
-    // Chrome quirk: cancelling an utterance while it is mid-speech (e.g. the
-    // user taps 跳過 or 重來 during the announcement) can leave the engine
-    // "busy" — speaking stays true — so the very next speak() is silently
-    // dropped and resume() alone won't clear it. When we detect that state,
-    // cancel and enqueue on the next tick so the engine recovers. Otherwise
-    // speak immediately, keeping the first utterance inside the user gesture
-    // (iOS Safari requires speech to start from a gesture).
-    const busy = synth.speaking || synth.pending || synth.paused;
-    clearTimeout(this.speakTimer);
-    synth.cancel();
-    synth.resume();
-    if (busy) {
-      this.speakTimer = setTimeout(() => { synth.resume(); synth.speak(u); }, 130);
-    } else {
-      synth.speak(u);
-    }
+    synth.speak(u);
   }
 
   kickSynth() {
