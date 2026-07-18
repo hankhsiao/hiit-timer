@@ -112,7 +112,14 @@ class AudioEngine {
   }
 
   stopSpeech() {
-    window.speechSynthesis?.cancel();
+    const synth = window.speechSynthesis;
+    if (!synth) return;
+    synth.cancel();
+    // cancel() clears the queue but can leave the engine stuck in a "paused"
+    // state (the kickSynth pause/resume hack or a browser auto-pause). If it
+    // stays paused, every later speak() is silenced — e.g. after 重來/reset.
+    // resume() clears that flag so the next utterance actually plays.
+    synth.resume();
   }
 
   async resume() {
@@ -150,6 +157,9 @@ class AudioEngine {
     const synth = window.speechSynthesis;
     if (!synth) { onEnd?.(); return; }
     synth.cancel();
+    // Guard against a lingering paused state (see stopSpeech) so this
+    // utterance is guaranteed to play, not silently queued.
+    synth.resume();
     const u = new SpeechSynthesisUtterance(text);
     u.lang = 'zh-TW'; u.rate = 1.1; u.volume = 1;
     if (onEnd) { u.onend = onEnd; u.onerror = onEnd; }
