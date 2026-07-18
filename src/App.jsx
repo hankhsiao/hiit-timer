@@ -423,6 +423,18 @@ export default function App() {
     noSleep.disable();
   };
 
+  // Skip the pre-workout announcement (the read-out of the full exercise
+  // list) and jump straight into the countdown. Handy when a routine has
+  // many exercises and the intro takes too long to listen to.
+  const skipAnnounce = () => {
+    if (!announcingRef.current) return;
+    announcingRef.current = false;
+    clearTimeout(announceFallback.current);
+    audioEngine.stopSpeech();
+    startPhase('PREPARING', 3);
+    setIsActive(true);
+  };
+
   const toggle = () => {
     audioEngine.init();
 
@@ -706,7 +718,7 @@ export default function App() {
           )}
           {(phase === 'IDLE' || phase === 'ANNOUNCING') && (
             <div style={{ fontSize: 11, color: T.subtext, fontWeight: 600, marginTop: 8 }}>
-              {phase === 'ANNOUNCING' ? '點擊取消' : '預計總時長'}
+              {phase === 'ANNOUNCING' ? '點擊取消 · ⏭ 跳過播報' : '預計總時長'}
             </div>
           )}
         </div>
@@ -749,7 +761,14 @@ export default function App() {
             ? <Pause size={30} color="#fff" fill="#fff" />
             : <Play  size={30} color="#fff" fill="#fff" style={{ transform: 'translateX(2px)' }} />}
         </button>
-        {phase === 'PREPARING' || phase === 'WORK' || phase === 'REST' || phase === 'ROUND_RESET'
+        {phase === 'ANNOUNCING'
+          ? <button onClick={skipAnnounce} title="跳過播報" aria-label="跳過播報"
+              style={{ width: 52, height: 52, borderRadius: '50%',
+                background: T.iconBtn, border: 'none', color: T.text, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <SkipForward size={20} />
+            </button>
+          : phase === 'PREPARING' || phase === 'WORK' || phase === 'REST' || phase === 'ROUND_RESET'
           ? <button onClick={skipToNext} title="跳到下一個" aria-label="跳到下一個"
               style={{ width: 52, height: 52, borderRadius: '50%',
                 background: T.iconBtn, border: 'none', color: T.text, cursor: 'pointer',
